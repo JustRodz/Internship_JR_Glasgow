@@ -46,7 +46,7 @@ plt.imshow(mask[:,:,0,0])
 np.save("C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/LVOT_view_test/Data/20160906131917_LVOT_SSFP_CINE_25.nii/test_niftiheader_LVOT_25.npy",affine)
 
 #%%
-
+affine = nib.load("C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/LVOT_view_test/Data/20160906131917_LVOT_SSFP_CINE_25.nii/20160906131917_LVOT_SSFP_CINE_25.nii").affine  ##retrieves the affine transformation matrix from the NIfTI file (image coord -> IRL coord)
 mask = nib.load("C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/LVOT_view_test/Data/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_Segmentation.nii/LVOT_SSFP_CINE_25_Segmentation.nii").get_fdata()  ##Get_fdata transforms NifTy image data into a NumPy array
 
 # FIND NONZERO INDICES

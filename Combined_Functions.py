@@ -54,7 +54,8 @@ def generate_load_curve(file_path, func, start=0, end=40, step=1):
             f.write(f"{x} {y}\n")
 
 
-# %% ###############################################################################################
+
+#%%
 # Saving the header of the segmentation (useful to rotate the model)
 def Seg_header(file_path, seg_path, output_path):
     affine = nib.load(file_path).affine  ##retrieves the affine transformation matrix from the NIfTI file (image coord -> IRL coord)
@@ -67,11 +68,10 @@ def Seg_header(file_path, seg_path, output_path):
 #%%
 def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
     """
-    Args:
-        nifti_path (str): Chemin vers le fichier NIfTI original (pour extraire la matrice affine).
-        segmentation_path (str): Chemin vers le fichier NIfTI contenant la segmentation 4D.
-        output_dir (str): Dossier de sortie pour les fichiers .vtk générés.
-        affine_save_path (str): Chemin pour enregistrer la matrice affine en .npy. (Meme resultat que pour la fonction Seg_header)
+    nifti_path (str): Chemin vers le fichier NIfTI original (pour extraire la matrice affine).
+    segmentation_path (str): Chemin vers le fichier NIfTI contenant la segmentation 4D.
+    output_dir (str): Dossier de sortie pour les fichiers .vtk générés.
+    affine_save_path (str): Chemin pour enregistrer la matrice affine en .npy. (Meme resultat que pour la fonction Seg_header)
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -153,11 +153,10 @@ def transformPolyData(polyData, transform):
 #%%
 def rotate_vtk(nifti_path, grad_path, output_path, A):
     """
-    Args:
-        nifti_path (str): Chemin vers le fichier NIfTI original (pour extraire la matrice affine).
-        grad_path (str): Dossier d`entree pour les fichiers gradient_{}.vtk existants.
-        output_path (str): Dossier de sortie pour les fichiers .vtk générés.
-        A (int): Nombre de timestep du modele 
+    nifti_path (str): Chemin vers le fichier NIfTI original (pour extraire la matrice affine).
+    grad_path (str): Dossier d`entree pour les fichiers gradient_{}.vtk existants.
+    output_path (str): Dossier de sortie pour les fichiers .vtk générés.
+    A (int): Nombre de timestep du modele 
     """
     
     os.makedirs(output_path, exist_ok=True)
@@ -183,3 +182,91 @@ def rotate_vtk(nifti_path, grad_path, output_path, A):
         writer.SetFileName(vtk_path_rota)
         writer.SetInputData(out)
         writer.Write()
+
+
+
+#%%
+def vtk2Dslicer (model_path, output_path, A):
+    """
+    model_path (str): Dossier d'entrée pour le modèle 3D existant.
+    output_path (str): Dossier de sortie pour les fichiers .vtk générés.
+    A (int): Nombre de timesteps du modèle.
+    """
+    os.makedirs(output_path, exist_ok=True)
+
+    # #Reading the 3D model
+    # reader3D = vtk.vtkPolyDataReader()
+    # reader3D.SetFileName(model_path)
+    # reader3D.Update()
+    # polydata3D = reader3D.GetOutput()
+
+    for i in range(A):   ##range value is equal to the number of time step, 40 in our case
+        #Reading the 3D model
+        # if i<10 :
+        #     vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t0{i}.vtk")
+        # else :
+        vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk")
+        print("reading"+ vtk_path_model)
+
+        # Lire le maillage 3D (Unstructured Grid)
+        reader3D = vtk.vtkUnstructuredGridReader()
+        reader3D.SetFileName(vtk_path_model)
+        reader3D.Update()
+
+        # Si vous avez besoin d’un PolyData pour la coupe :
+        geometryFilter = vtk.vtkGeometryFilter()
+        geometryFilter.SetInputData(reader3D.GetOutput())
+        geometryFilter.Update()
+        polydata3D = geometryFilter.GetOutput()
+
+        #Reading the 2D MRI ##### Boucle for i in range(timestep) a implementer
+        vtk_path_rota = os.path.join(output_path, f"rotated_29_{i}.vtk")
+        reader2D = vtk.vtkPolyDataReader()
+        reader2D.SetFileName(vtk_path_rota)
+        reader2D.Update()
+        polydata2D = reader2D.GetOutput()
+
+        #Calcul du plan moyen et de sa normale
+        # Récupère les points de la coupe
+        points = polydata2D.GetPoints()
+        n_points = points.GetNumberOfPoints()
+
+        # Convertit en numpy pour faciliter le calcul
+        pts = np.array([points.GetPoint(j) for j in range(n_points)])
+
+        # Point moyen du plan
+        center = np.mean(pts, axis=0)
+
+        # Estimation de la normale via ACP (analyse en composantes principales)
+        _, _, vh = np.linalg.svd(pts - center)
+        normal = vh[2]  # La 3e composante (plus faible variance) correspond à la normale
+
+        #Definition du plan de coupe dans vtk
+        cutPlane = vtk.vtkPlane()
+        cutPlane.SetOrigin(center)
+        cutPlane.SetNormal(normal)
+
+        #Application de la coupe au modele 3D
+        cutter = vtk.vtkCutter()
+        cutter.SetCutFunction(cutPlane)
+        cutter.SetInputData(polydata3D)
+        cutter.Update()
+        cutPolyData = cutter.GetOutput()
+        print("Type de données sauvegardées :", cutPolyData.GetClassName())
+
+        #Sauvegarde en vtk
+        vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
+        writer = vtk.vtkPolyDataWriter()
+        writer.SetFileName(vtk_path_slice)
+        writer.SetInputData(cutPolyData)
+        writer.SetFileTypeToASCII()
+        writer.Write()
+    print("vtk2Dslicer - execution completed")
+
+
+# test
+path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
+path_out = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
+step = 40
+vtk2Dslicer(path_3D, path_out, step)
+# %%
