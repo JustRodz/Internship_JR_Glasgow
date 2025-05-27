@@ -5,6 +5,8 @@ import nibabel as nib
 import os
 import matplotlib.pyplot as plt
 
+from scipy.linalg import svd
+
 import vtkmodules.all as vtk
 
 from vtk import vtkPolyDataWriter
@@ -35,7 +37,13 @@ from vtkmodules.vtkRenderingCore import (
 )
 
 
-
+def read_points_vtk(file_vtk):
+    reader = vtk.vtkPolyDataReader()
+    reader.SetFileName(file_vtk)
+    reader.Update()
+    polydata = reader.GetOutput()
+    points = polydata.GetPoints()
+    return points
 
 
 #%% Load curve
@@ -68,10 +76,10 @@ def Seg_header(file_path, seg_path, output_path):
 #%%
 def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
     """
-    nifti_path (str): Chemin vers le fichier NIfTI original (pour extraire la matrice affine).
-    segmentation_path (str): Chemin vers le fichier NIfTI contenant la segmentation 4D.
-    output_dir (str): Dossier de sortie pour les fichiers .vtk générés.
-    affine_save_path (str): Chemin pour enregistrer la matrice affine en .npy. (Meme resultat que pour la fonction Seg_header)
+    nifti_path (str): Path to the original NIfTI file (to extract the affine matrix).
+    segmentation_path (str): Path to the NIfTI file containing the 4D segmentation.
+    output_dir (str): Output folder for generated .vtk files.
+    affine_save_path (str): Path to save the affine matrix as .npy (same result as for the Seg_header function)
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -153,10 +161,10 @@ def transformPolyData(polyData, transform):
 #%%
 def rotate_vtk(nifti_path, grad_path, output_path, A):
     """
-    nifti_path (str): Chemin vers le fichier NIfTI original (pour extraire la matrice affine).
-    grad_path (str): Dossier d`entree pour les fichiers gradient_{}.vtk existants.
-    output_path (str): Dossier de sortie pour les fichiers .vtk générés.
-    A (int): Nombre de timestep du modele 
+    nifti_path (str): Path to the original NIfTI file (to extract the affine matrix).
+    grad_path (str): Folder for existing gradient_{}.vtk files.
+    output_path (str): Output folder for generated .vtk files.
+    A (int): Number of timesteps in the model 
     """
     
     os.makedirs(output_path, exist_ok=True)
@@ -188,9 +196,9 @@ def rotate_vtk(nifti_path, grad_path, output_path, A):
 #%%
 def vtk2Dslicer (model_path, output_path, A):
     """
-    model_path (str): Dossier d'entrée pour le modèle 3D existant.
-    output_path (str): Dossier de sortie pour les fichiers .vtk générés.
-    A (int): Nombre de timesteps du modèle.
+    model_path (str): Input file for the existing 3D model.
+    output_path (str): Output folder for generated .vtk files.
+    A (int): Number of timesteps in the model
     """
     os.makedirs(output_path, exist_ok=True)
 
@@ -206,7 +214,7 @@ def vtk2Dslicer (model_path, output_path, A):
         #     vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t0{i}.vtk")
         # else :
         vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk")
-        print("reading"+ vtk_path_model)
+        # print("reading : "+ vtk_path_model)
 
         # Lire le maillage 3D (Unstructured Grid)
         reader3D = vtk.vtkUnstructuredGridReader()
@@ -252,7 +260,7 @@ def vtk2Dslicer (model_path, output_path, A):
         cutter.SetInputData(polydata3D)
         cutter.Update()
         cutPolyData = cutter.GetOutput()
-        print("Type de données sauvegardées :", cutPolyData.GetClassName())
+        # print("Type de données sauvegardées :", cutPolyData.GetClassName())
 
         #Sauvegarde en vtk
         vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
@@ -269,4 +277,121 @@ path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
 path_out = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
 step = 40
 vtk2Dslicer(path_3D, path_out, step)
+
+
+# %%
+def shape_center(vtk_file):
+    """
+    vtk_file (str): Input file for the existing 3D model.
+    A (int): Number of timesteps in the model
+    """
+    # reading the vtk file
+    points = read_points_vtk(vtk_file)
+
+    # Set the centre coordinates
+    centre = [0.0, 0.0, 0.0]
+
+    # Calculate the centre by averaging the coordinates of the points
+    for i in range(points.GetNumberOfPoints()):
+        point = points.GetPoint(i)
+        centre[0] += point[0]
+        centre[1] += point[1]
+        centre[2] += point[2]
+
+    nmb_points = points.GetNumberOfPoints()
+    centre[0] /= nmb_points
+    centre[1] /= nmb_points
+    centre[2] /= nmb_points
+    # print(type(centre))
+    # print(points.GetNumberOfPoints())
+    return centre
+
+# Example
+outputfile = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
+tab = np.empty((0, 3), int)
+for i in range(40) :
+    input_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
+    vtk_file = os.path.join(input_path, f"rotated_29_{i}.vtk")
+    centre = shape_center(vtk_file)
+    tab = np.vstack([tab, centre])
+    # print("At step ", i, " Coordinates of the aorta centre :", centre)
+# print("la matrice regroupant les centre est : ", tab)
+# quatrieme_ligne = tab[3, :]
+# print("4ème ligne de la matrice :", quatrieme_ligne)
+# %%
+######################################
+####### Tentative optimisation #######
+######################################
+
+def centrer_points(file_vtk):
+    """
+    file_vtk (str) : Input file for the existing 3D model.
+    """
+    centre = shape_center(file_vtk)
+    points_centres = []
+    points=read_points_vtk(file_vtk)
+    for i in range(points.GetNumberOfPoints()):
+        point = points.GetPoint(i)
+        point_centre = [point[0] - centre[0], point[1] - centre[1], point[2] - centre[2]]
+        points_centres.append(point_centre)
+    return np.array(points_centres)
+
+## Test
+input_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/rotated_29_2.vtk"
+matrice = centrer_points(input_path)
+print(matrice)
+
+
+
+
+
+#%%
+def calculer_rotation_optimale(points_A, points_B):
+    """
+    points_A and points_B are NumPy arrays containing the coordinates of the points in the two sets of points to be aligned.
+    """
+    # Calculer la matrice de covariance
+    H = np.dot(np.transpose(points_A), points_B)
+
+    # Décomposition en valeurs singulières
+    U, S, Vt = svd(H)
+
+    # Calculer la matrice de rotation optimale
+    R = np.dot(Vt.T, U.T)
+
+    # Assurer que la matrice de rotation est une rotation propre (déterminant = 1)
+    if np.linalg.det(R) < 0:
+        Vt[-1, :] *= -1
+        R = np.dot(Vt.T, U.T)
+
+    return R
+
+def apply_rotation(points, R):
+    points_rotates = np.dot(points, R.T)
+    return points_rotates
+
+def calculer_ecart_residuel(points_A, points_B):
+    ecart = np.linalg.norm(points_A - points_B)
+    return ecart
+
+
+##Test~~~~~
+
+input_path_A = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/rotated_29_2.vtk"
+matrice_A = centrer_points(input_path_A)
+
+input_path_B = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/transverse_slice_002.vtk"
+matrice_B = centrer_points(input_path_B)
+
+# # Calculer la rotation optimale
+# R = calculer_rotation_optimale(matrice_A, matrice_B)
+
+# # Appliquer la rotation à points_A
+# points_A_rotates = apply_rotation(matrice_A, R)
+
+
+# Calculer l'écart résiduel
+ecart = calculer_ecart_residuel(matrice_A, matrice_B)
+print("Écart résiduel après rotation :", ecart)
+
 # %%
