@@ -6,6 +6,12 @@ import os
 import matplotlib.pyplot as plt
 
 from scipy.linalg import svd
+from scipy.interpolate import interp1d
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+import plotly.graph_objects as go
 
 import vtkmodules.all as vtk
 
@@ -318,12 +324,55 @@ for i in range(40) :
 # print("la matrice regroupant les centre est : ", tab)
 # quatrieme_ligne = tab[3, :]
 # print("4ème ligne de la matrice :", quatrieme_ligne)
-# %%
+
+
+
+# %% ################################################
+
+def reorder_points(points):
+    """
+    This function is required because the slice generated link points by their z-value, thus creating a non-continuous path.
+
+    The funtion reorders a list of 3D points to form a continuous path.
+    This method follows a nearest neighbour algorithm:
+    it starts from the first point and at each step adds the nearest point
+    of those not yet used.
+    
+    Args:
+        points (np.ndarray): array of shapes (N, 3), representing 3D points.
+    """
+
+    # Copy to avoid modifying the original data
+    points = points.copy()
+
+    # List for storing reordered points
+    ordered = [points[0]]  # We start with the first point of the original list
+
+    # Boolean table to see which points have already been used
+    used = np.zeros(len(points), dtype=bool)
+    used[0] = True  # the first point is already in use
+
+    # Repeat until all points have been used
+    for _ in range(1, len(points)):
+        last_point = ordered[-1]  # last point added
+        # Calculate the distance between the current point and the others
+        dists = np.linalg.norm(points - last_point, axis=1)
+        dists[used] = np.inf  # Skipping pint that are already used
+        # Find the nearest unused point
+        next_index = np.argmin(dists)
+        # Add this point to the ordered list
+        ordered.append(points[next_index])
+        used[next_index] = True  
+
+    return np.array(ordered)
+
+
+#%%
 ######################################
 ####### Tentative optimisation #######
 ######################################
 
-def centrer_points(file_vtk):
+def recentrer_points(file_vtk):
     """
     file_vtk (str) : Input file for the existing 3D model.
     """
@@ -337,40 +386,94 @@ def centrer_points(file_vtk):
     return np.array(points_centres)
 
 ## Test
-input_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/rotated_29_2.vtk"
-matrice = centrer_points(input_path)
-print(matrice)
+# input_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/rotated_29_2.vtk"
+# matrice = recentrer_points(input_path)
+# print(matrice)
 
 
+#%% 
+## Warning : The interpolator_points function tend to causes issue with complex 3D curves( Creating points in the volume but not along the curves)
+def interpolator_points(points, target_point_number):
+    """
+    points (float) : An array of points to be interpolated.
+    target_point_number : the desired number of points after interpolation.
+    """
+    # Create a linear interpolation for each dimension
+    x = np.linspace(0, 1, points.shape[0])
+    x_new = np.linspace(0, 1, target_point_number)
+
+    # Interpolate each dimension
+    interpolated_points = np.zeros((target_point_number, 3))
+    for i in range(3):
+        f = interp1d(x, points[:, i], kind='linear')
+        interpolated_points[:, i] = f(x_new)
+    ordered_interpolated_points=reorder_points(interpolated_points)
+    return ordered_interpolated_points
+
+# # Use Example
+# new_number_points = min(matrice_A.shape[0], matrice_B.shape[0])
+# matrice_A_interpolee = interpolator_points(matrice_A, new_number_points)
+# matrice_B_interpolee = interpolator_points(matrice_B, new_number_points)
 
 
+def interpolate_along_curve(points, target_point_number):
+    # Calcul des longueurs cumulées (distance curviligne)
+    distances = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    cumulative_dist = np.insert(np.cumsum(distances), 0, 0)
+    cumulative_dist /= cumulative_dist[-1]  # normaliser entre 0 et 1
+
+    # Nouvelles positions uniformément réparties
+    target_distances = np.linspace(0, 1, target_point_number)
+
+    # Interpolation le long de la courbe
+    interpolated_points = np.zeros((target_point_number, 3))
+    for i in range(3):
+        f = interp1d(cumulative_dist, points[:, i], kind='linear')
+        interpolated_points[:, i] = f(target_distances)
+    ordered_interpolated_points=reorder_points(interpolated_points)
+    return ordered_interpolated_points
 
 #%%
-def calculer_rotation_optimale(points_A, points_B):
+def kabsch_align(points_A, points_B):
     """
-    points_A and points_B are NumPy arrays containing the coordinates of the points in the two sets of points to be aligned.
+    points_A: np.ndarray of shape (N, 3) - reference point cloud
+    points_B: np.ndarray of shape (N, 3) - point cloud to align
     """
-    # Calculer la matrice de covariance
-    H = np.dot(np.transpose(points_A), points_B)
+    # Center both point clouds around their centroids
+    A = points_A - points_A.mean(axis=0)
+    B = points_B - points_B.mean(axis=0)
 
-    # Décomposition en valeurs singulières
-    U, S, Vt = svd(H)
+    # Compute covariance matrix
+    H = B.T @ A
 
-    # Calculer la matrice de rotation optimale
-    R = np.dot(Vt.T, U.T)
+    # Singular Value Decomposition (SVD)
+    U, S, Vt = np.linalg.svd(H)
 
-    # Assurer que la matrice de rotation est une rotation propre (déterminant = 1)
+    # Compute the optimal rotation matrix
+    R = Vt.T @ U.T
+
+    # Reflection correction (ensure proper rotation with determinant +1)
     if np.linalg.det(R) < 0:
         Vt[-1, :] *= -1
-        R = np.dot(Vt.T, U.T)
+        R = Vt.T @ U.T
+    # Rotate B and re-add A's centroid to complete alignment
+    B_aligned = (B @ R) + points_A.mean(axis=0)
 
-    return R
+    # Optionally reorder points (Ensure a continuous curve)
+    B_aligned=reorder_points(B_aligned)
+    return B_aligned
 
-def apply_rotation(points, R):
-    points_rotates = np.dot(points, R.T)
-    return points_rotates
 
-def calculer_ecart_residuel(points_A, points_B):
+def project_to_plane(points, normal, point_on_plane):
+    """
+    Projects 3D points onto a plane defined by a normal vector and a point on the plane.
+    """
+    normal = normal / np.linalg.norm(normal)
+    vectors = points - point_on_plane
+    distances = np.dot(vectors, normal)
+    return points - np.outer(distances, normal)
+
+def gap_calculator(points_A, points_B):
     ecart = np.linalg.norm(points_A - points_B)
     return ecart
 
@@ -378,20 +481,109 @@ def calculer_ecart_residuel(points_A, points_B):
 ##Test~~~~~
 
 input_path_A = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/rotated_29_2.vtk"
-matrice_A = centrer_points(input_path_A)
-
+matrice_A = recentrer_points(input_path_A)
+matrice_A = reorder_points(matrice_A)
 input_path_B = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/transverse_slice_002.vtk"
-matrice_B = centrer_points(input_path_B)
+matrice_B = recentrer_points(input_path_B)
+matrice_B = reorder_points(matrice_B)
 
-# # Calculer la rotation optimale
-# R = calculer_rotation_optimale(matrice_A, matrice_B)
+# Interpolate the matrix
+new_number_points = min(matrice_A.shape[0], matrice_B.shape[0])
+matrice_A_interpolee = interpolate_along_curve(matrice_A, new_number_points)
+matrice_B_interpolee = interpolate_along_curve(matrice_B, new_number_points)
 
-# # Appliquer la rotation à points_A
-# points_A_rotates = apply_rotation(matrice_A, R)
 
 
-# Calculer l'écart résiduel
-ecart = calculer_ecart_residuel(matrice_A, matrice_B)
-print("Écart résiduel après rotation :", ecart)
+############# Optimisation
 
+# Calculate the original residual gap
+gap_init = gap_calculator(matrice_A_interpolee, matrice_B_interpolee)
+print("Gap before optimization :", gap_init)
+
+matrice_B_opti = kabsch_align(matrice_A_interpolee, matrice_B_interpolee)
+
+# # Reprojeter dans le plan de A (Ensure the optimised result is in the same plan as matrice_A)
+# plane_normal = np.cross(matrice_A_interpolee[1] - matrice_A_interpolee[0], matrice_A_interpolee[2] - matrice_A_interpolee[0])
+# plane_point = matrice_A_interpolee[0]
+# matrice_B_opti = project_to_plane(matrice_B_opti, plane_normal, plane_point)
+
+# Calculate the final residual gap
+gap_final = gap_calculator(matrice_A_interpolee, matrice_B_opti)
+print("Gap after optimization :", gap_final)
+
+
+
+##### Visualization
+
+# # Creating the figure and 3D axis
+# fig = plt.figure()
+# ax = fig.add_subplot(111, projection='3d')
+
+# # Draw the original contour (line + points)
+# ax.plot(matrice_A_interpolee[:, 0], matrice_A_interpolee[:, 1], matrice_A_interpolee[:, 2], 'r-', alpha=0.6, label='Interpolation A')
+# ax.scatter(matrice_A_interpolee[:, 0], matrice_A_interpolee[:, 1], matrice_A_interpolee[:, 2], c='r', s=20, alpha=0.5)
+
+# # Draw interpolated points and their lines
+# ax.plot(matrice_B_interpolee[:, 0], matrice_B_interpolee[:, 1], matrice_B_interpolee[:, 2],
+#         'b--', label='Interpolation B')
+# ax.scatter(matrice_B_interpolee[:, 0], matrice_B_interpolee[:, 1], matrice_B_interpolee[:, 2],
+#            c='b', s=20)
+
+# # Draw the optimised contour points and their lines
+# ax.plot(matrice_B_opti[:, 0], matrice_B_opti[:, 1], matrice_B_opti[:, 2],
+#         'g--', label='Optimised B')
+# ax.scatter(matrice_B_opti[:, 0], matrice_B_opti[:, 1], matrice_B_opti[:, 2],
+#            c='g', s=20)
+
+# ax.set_title("Interpolation along the 3D contour")
+# ax.set_xlabel("X")
+# ax.set_ylabel("Y")
+# ax.set_zlabel("Z")
+# ax.legend()
+# plt.tight_layout()
+# plt.show()
+
+fig = go.Figure()
+
+# Courbe A (rouge)
+fig.add_trace(go.Scatter3d(
+    x=matrice_A_interpolee[:, 0], y=matrice_A_interpolee[:, 1], z=matrice_A_interpolee[:, 2],
+    mode='lines+markers',
+    name='Interpolation A',
+    line=dict(color='red'),
+    marker=dict(size=3, color='red', opacity=0.5)
+))
+
+# Courbe B (bleu)
+fig.add_trace(go.Scatter3d(
+    x=matrice_B_interpolee[:, 0], y=matrice_B_interpolee[:, 1], z=matrice_B_interpolee[:, 2],
+    mode='lines+markers',
+    name='Interpolation B',
+    line=dict(color='blue', dash='dash'),
+    marker=dict(size=3, color='blue')
+))
+
+# Courbe B optimisée (vert)
+fig.add_trace(go.Scatter3d(
+    x=matrice_B_opti[:, 0], y=matrice_B_opti[:, 1], z=matrice_B_opti[:, 2],
+    mode='lines+markers',
+    name='Optimised B',
+    line=dict(color='green', dash='dash'),
+    marker=dict(size=3, color='green')
+))
+
+# Mise en page
+fig.update_layout(
+    title='Interpolation along the 3D contour',
+    scene=dict(
+        xaxis_title='X',
+        yaxis_title='Y',
+        zaxis_title='Z'
+    ),
+    legend=dict(x=0, y=1.5),
+    margin=dict(l=0, r=0, b=0, t=30),
+    height=400
+)
+
+fig.show()
 # %%
