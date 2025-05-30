@@ -2,6 +2,8 @@
 # IMPORTS
 import numpy as np
 import nibabel as nib
+import itk
+import SimpleITK as sitk
 import os
 import matplotlib.pyplot as plt
 
@@ -66,6 +68,156 @@ def generate_load_curve(file_path, func, start=0, end=40, step=1):
         for x in range(start, end+1, step):
             y = func(x)
             f.write(f"{x} {y}\n")
+
+#%%
+import SimpleITK as sitk
+import nibabel as nib
+import numpy as np
+
+# def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=None, iterations=100):
+#     """
+#     Args:
+#         nifti_image_path (str): Path to original image (.nii or .nii.gz)
+#         nifti_mask_path (str): Path to the initial segmentation (binary) in NIfTI format
+#         output_path (str, optional): Path to save the result (NIfTI). If None, do not save.
+#         iterations (int): Number of iterations of the level-set evolution.
+
+#     Returns:
+#         SimpleITK.Image: The resulting segmented image (binary)
+#     """
+
+#     # Load data with SimpleITK
+#     img_sitk = sitk.ReadImage(nifti_image_path, sitk.sitkFloat32)  # Convert to float32
+#     mask_sitk = sitk.ReadImage(nifti_mask_path, sitk.sitkFloat32)  # Convert to float32
+
+#     # Get the number of timesteps
+#     num_timesteps = img_sitk.GetSize()[-1]
+
+#     # Initialize a list to store the segmented timesteps
+#     segmented_timesteps = []
+
+#     # Iterate over each timestep
+#     for t in range(num_timesteps):
+#         # Extract the current timestep
+#         img_timestep = img_sitk[:, :, :, t]
+#         mask_timestep = mask_sitk[:, :, :, t]
+
+#         # Iterate over each 2D slice in the timestep
+#         num_slices = img_timestep.GetSize()[-1]
+#         segmented_slices = []
+
+#         for s in range(num_slices):
+#             img_slice = img_timestep[:, :, s]
+#             mask_slice = mask_timestep[:, :, s]
+
+#             # Apply the GeodesicActiveContourLevelSet filter
+#             filter = sitk.GeodesicActiveContourLevelSetImageFilter()
+#             filter.SetNumberOfIterations(iterations)
+#             filter.SetPropagationScaling(1.0)
+#             filter.SetCurvatureScaling(1.0)
+#             filter.SetAdvectionScaling(1.0)
+
+#             result_slice = filter.Execute(mask_slice, img_slice)
+#             segmented_slices.append(result_slice)
+
+#         # Combine the segmented slices into a single timestep
+#         segmented_timestep = sitk.JoinSeries(segmented_slices)
+#         segmented_timesteps.append(segmented_timestep)
+
+#     # Combine the segmented timesteps into a single 4D image
+#     result_sitk = sitk.JoinSeries(segmented_timesteps)
+#     # Binarise the level set result
+#     binary_result = sitk.BinaryThreshold(result_sitk, lowerThreshold=-1e-6, upperThreshold=1e-6, insideValue=1, outsideValue=0)
+
+#     # # Binarize each 3D volume separately
+#     # binary_timesteps = [
+#     #     sitk.BinaryThreshold(ts, lowerThreshold=-1e-6, upperThreshold=1e-6, insideValue=1, outsideValue=0)
+#     #     for ts in segmented_timesteps
+#     # ]
+
+#     # # Combine into 4D image
+#     # binary_result = sitk.JoinSeries(binary_timesteps)
+#     # binary_result.SetOrigin(img_sitk.GetOrigin())
+#     # binary_result.SetSpacing(img_sitk.GetSpacing())
+#     # binary_result.SetDirection(img_sitk.GetDirection())
+
+    
+#     # Save the result if output_path is provided
+#     if output_path:
+#         sitk.WriteImage(binary_result, output_path)
+
+#     return binary_result
+
+
+
+
+
+
+def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=None, iterations=100):
+    """
+    Args:
+        nifti_image_path (str): Path to original image (.nii or .nii.gz)
+        nifti_mask_path (str): Path to the initial segmentation (binary) in NIfTI format
+        output_path (str, optional): Path to save the result (NIfTI). If None, do not save.
+        iterations (int): Number of iterations of the level-set evolution.
+
+    Returns:
+        SimpleITK.Image: The resulting segmented image (binary)
+    """
+
+    # Load data with SimpleITK
+    img_sitk = sitk.ReadImage(nifti_image_path, sitk.sitkFloat32)  # Convert to float32
+    mask_sitk = sitk.ReadImage(nifti_mask_path, sitk.sitkFloat32)  # Convert to float32
+
+    # Get the number of timesteps
+    num_timesteps = img_sitk.GetSize()[-1]
+
+    # Initialize a list to store the segmented timesteps
+    segmented_timesteps = []
+
+    # Iterate over each timestep
+    for t in range(num_timesteps):
+        # Extract the current timestep
+        img_timestep = img_sitk[:, :, :, t]
+        mask_timestep = mask_sitk[:, :, :, t]
+
+        # Iterate over each 2D slice in the timestep
+        num_slices = img_timestep.GetSize()[-1]
+        segmented_slices = []
+
+        for s in range(num_slices):
+            img_slice = img_timestep[:, :, s]
+            mask_slice = mask_timestep[:, :, s]
+
+            # Apply the GeodesicActiveContourLevelSet filter
+            filter = sitk.GeodesicActiveContourLevelSetImageFilter()
+            filter.SetNumberOfIterations(iterations)
+            filter.SetPropagationScaling(1.0)
+            filter.SetCurvatureScaling(1.0)
+            filter.SetAdvectionScaling(1.0)
+
+            result_slice = filter.Execute(mask_slice, img_slice)
+            segmented_slices.append(result_slice)
+
+        # Combine the segmented slices into a single timestep
+        segmented_timestep = sitk.JoinSeries(segmented_slices)
+        segmented_timesteps.append(segmented_timestep)
+
+    # Combine the segmented timesteps into a single 4D image
+    result_sitk = sitk.JoinSeries(segmented_timesteps)
+
+    # Save the result if output_path is provided
+    if output_path:
+        sitk.WriteImage(result_sitk, output_path)
+
+    return result_sitk
+
+# Test
+affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29.nii"
+mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Segmentation.nii"
+output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
+seg = apply_levelset_seg_simpleitk(affine, mask, output_path, iterations=100)
+print("Level set done")
 
 
 
@@ -155,6 +307,16 @@ def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
         ##print(f"[{i}] Fichier gradient écrit : {vtk_path_grad}")
 
 
+# Test
+nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29.nii"
+nifti_seg = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
+output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/Test_levelset"
+header_file="C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/Test_levelset/test_niftiheader_29_levelset.npy"
+new_vtk = Seg2Contours(nifti_file, nifti_seg, output_path, header_file)
+print("vtk conversion done")
+
+
+
 #%% Fonction appliquant la transformee spatiale
 def transformPolyData(polyData, transform):
 
@@ -175,7 +337,9 @@ def rotate_vtk(nifti_path, grad_path, output_path, A):
     
     os.makedirs(output_path, exist_ok=True)
 
-    affine = np.load(nifti_path)
+    # Load affine matrix from NIfTI file
+    nifti_img = nib.load(nifti_path)
+    affine = nifti_img.affine
     affine_list = affine.reshape(16).tolist()
     tr = vtk.vtkTransform()
     tr.SetMatrix(affine_list)
@@ -197,7 +361,13 @@ def rotate_vtk(nifti_path, grad_path, output_path, A):
         writer.SetInputData(out)
         writer.Write()
 
+# Test
+nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29.nii"
+grad_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/Test_levelset"
+output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/Test_levelset"
 
+new_vtk = rotate_vtk(nifti_file, grad_path, output_path, 40)
+print("vtk rotation done")
 
 #%%
 def vtk2Dslicer (model_path, output_path, A):
@@ -208,11 +378,6 @@ def vtk2Dslicer (model_path, output_path, A):
     """
     os.makedirs(output_path, exist_ok=True)
 
-    # #Reading the 3D model
-    # reader3D = vtk.vtkPolyDataReader()
-    # reader3D.SetFileName(model_path)
-    # reader3D.Update()
-    # polydata3D = reader3D.GetOutput()
 
     for i in range(A):   ##range value is equal to the number of time step, 40 in our case
         #Reading the 3D model
@@ -278,11 +443,11 @@ def vtk2Dslicer (model_path, output_path, A):
     print("vtk2Dslicer - execution completed")
 
 
-# test
-path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
-path_out = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
-step = 40
-vtk2Dslicer(path_3D, path_out, step)
+# # test
+# path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
+# path_out = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
+# step = 40
+# vtk2Dslicer(path_3D, path_out, step)
 
 
 # %%
@@ -313,13 +478,13 @@ def shape_center(vtk_file):
     return centre
 
 # Example
-outputfile = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
-tab = np.empty((0, 3), int)
-for i in range(40) :
-    input_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
-    vtk_file = os.path.join(input_path, f"rotated_29_{i}.vtk")
-    centre = shape_center(vtk_file)
-    tab = np.vstack([tab, centre])
+# outputfile = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
+# tab = np.empty((0, 3), int)
+# for i in range(40) :
+#     input_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
+#     vtk_file = os.path.join(input_path, f"rotated_29_{i}.vtk")
+#     centre = shape_center(vtk_file)
+#     tab = np.vstack([tab, centre])
     # print("At step ", i, " Coordinates of the aorta centre :", centre)
 # print("la matrice regroupant les centre est : ", tab)
 # quatrieme_ligne = tab[3, :]
@@ -368,10 +533,6 @@ def reorder_points(points):
 
 
 #%%
-######################################
-####### Tentative optimisation #######
-######################################
-
 def recentrer_points(file_vtk):
     """
     file_vtk (str) : Input file for the existing 3D model.
@@ -434,6 +595,10 @@ def interpolate_along_curve(points, target_point_number):
     return ordered_interpolated_points
 
 #%%
+######################################
+####### Tentative optimisation #######
+######################################
+
 def kabsch_align(points_A, points_B):
     """
     points_A: np.ndarray of shape (N, 3) - reference point cloud
@@ -474,8 +639,8 @@ def project_to_plane(points, normal, point_on_plane):
     return points - np.outer(distances, normal)
 
 def gap_calculator(points_A, points_B):
-    ecart = np.linalg.norm(points_A - points_B)
-    return ecart
+    gap = np.linalg.norm(points_A - points_B)
+    return gap
 
 
 ##Test~~~~~
@@ -500,7 +665,7 @@ matrice_B_interpolee = interpolate_along_curve(matrice_B, new_number_points)
 gap_init = gap_calculator(matrice_A_interpolee, matrice_B_interpolee)
 print("Gap before optimization :", gap_init)
 
-matrice_B_opti = kabsch_align(matrice_A_interpolee, matrice_B_interpolee)
+matrice_A_opti = kabsch_align(matrice_B_interpolee, matrice_A_interpolee)
 
 # # Reprojeter dans le plan de A (Ensure the optimised result is in the same plan as matrice_A)
 # plane_normal = np.cross(matrice_A_interpolee[1] - matrice_A_interpolee[0], matrice_A_interpolee[2] - matrice_A_interpolee[0])
@@ -508,7 +673,7 @@ matrice_B_opti = kabsch_align(matrice_A_interpolee, matrice_B_interpolee)
 # matrice_B_opti = project_to_plane(matrice_B_opti, plane_normal, plane_point)
 
 # Calculate the final residual gap
-gap_final = gap_calculator(matrice_A_interpolee, matrice_B_opti)
+gap_final = gap_calculator(matrice_B_interpolee, matrice_A_opti)
 print("Gap after optimization :", gap_final)
 
 
@@ -565,9 +730,9 @@ fig.add_trace(go.Scatter3d(
 
 # Courbe B optimisée (vert)
 fig.add_trace(go.Scatter3d(
-    x=matrice_B_opti[:, 0], y=matrice_B_opti[:, 1], z=matrice_B_opti[:, 2],
+    x=matrice_A_opti[:, 0], y=matrice_A_opti[:, 1], z=matrice_A_opti[:, 2],
     mode='lines+markers',
-    name='Optimised B',
+    name='Optimised A',
     line=dict(color='green', dash='dash'),
     marker=dict(size=3, color='green')
 ))
@@ -576,9 +741,9 @@ fig.add_trace(go.Scatter3d(
 fig.update_layout(
     title='Interpolation along the 3D contour',
     scene=dict(
-        xaxis_title='X',
-        yaxis_title='Y',
-        zaxis_title='Z'
+        xaxis_title='X-Axis',
+        yaxis_title='Y-Axis',
+        zaxis_title='Z-Axis'
     ),
     legend=dict(x=0, y=1.5),
     margin=dict(l=0, r=0, b=0, t=30),
