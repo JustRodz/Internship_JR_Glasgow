@@ -71,94 +71,19 @@ def generate_load_curve(file_path, func, start=0, end=40, step=1):
 
 #%%
 import SimpleITK as sitk
-import nibabel as nib
+import vtk
+from vtk.util import numpy_support
+import os
+import cv2
 import numpy as np
 
-# def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=None, iterations=100):
-#     """
-#     Args:
-#         nifti_image_path (str): Path to original image (.nii or .nii.gz)
-#         nifti_mask_path (str): Path to the initial segmentation (binary) in NIfTI format
-#         output_path (str, optional): Path to save the result (NIfTI). If None, do not save.
-#         iterations (int): Number of iterations of the level-set evolution.
-
-#     Returns:
-#         SimpleITK.Image: The resulting segmented image (binary)
-#     """
-
-#     # Load data with SimpleITK
-#     img_sitk = sitk.ReadImage(nifti_image_path, sitk.sitkFloat32)  # Convert to float32
-#     mask_sitk = sitk.ReadImage(nifti_mask_path, sitk.sitkFloat32)  # Convert to float32
-
-#     # Get the number of timesteps
-#     num_timesteps = img_sitk.GetSize()[-1]
-
-#     # Initialize a list to store the segmented timesteps
-#     segmented_timesteps = []
-
-#     # Iterate over each timestep
-#     for t in range(num_timesteps):
-#         # Extract the current timestep
-#         img_timestep = img_sitk[:, :, :, t]
-#         mask_timestep = mask_sitk[:, :, :, t]
-
-#         # Iterate over each 2D slice in the timestep
-#         num_slices = img_timestep.GetSize()[-1]
-#         segmented_slices = []
-
-#         for s in range(num_slices):
-#             img_slice = img_timestep[:, :, s]
-#             mask_slice = mask_timestep[:, :, s]
-
-#             # Apply the GeodesicActiveContourLevelSet filter
-#             filter = sitk.GeodesicActiveContourLevelSetImageFilter()
-#             filter.SetNumberOfIterations(iterations)
-#             filter.SetPropagationScaling(1.0)
-#             filter.SetCurvatureScaling(1.0)
-#             filter.SetAdvectionScaling(1.0)
-
-#             result_slice = filter.Execute(mask_slice, img_slice)
-#             segmented_slices.append(result_slice)
-
-#         # Combine the segmented slices into a single timestep
-#         segmented_timestep = sitk.JoinSeries(segmented_slices)
-#         segmented_timesteps.append(segmented_timestep)
-
-#     # Combine the segmented timesteps into a single 4D image
-#     result_sitk = sitk.JoinSeries(segmented_timesteps)
-#     # Binarise the level set result
-#     binary_result = sitk.BinaryThreshold(result_sitk, lowerThreshold=-1e-6, upperThreshold=1e-6, insideValue=1, outsideValue=0)
-
-#     # # Binarize each 3D volume separately
-#     # binary_timesteps = [
-#     #     sitk.BinaryThreshold(ts, lowerThreshold=-1e-6, upperThreshold=1e-6, insideValue=1, outsideValue=0)
-#     #     for ts in segmented_timesteps
-#     # ]
-
-#     # # Combine into 4D image
-#     # binary_result = sitk.JoinSeries(binary_timesteps)
-#     # binary_result.SetOrigin(img_sitk.GetOrigin())
-#     # binary_result.SetSpacing(img_sitk.GetSpacing())
-#     # binary_result.SetDirection(img_sitk.GetDirection())
-
-    
-#     # Save the result if output_path is provided
-#     if output_path:
-#         sitk.WriteImage(binary_result, output_path)
-
-#     return binary_result
-
-
-
-
-
-
-def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=None, iterations=100):
+def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=None, vtk_output_path=None, iterations=100):
     """
     Args:
         nifti_image_path (str): Path to original image (.nii or .nii.gz)
         nifti_mask_path (str): Path to the initial segmentation (binary) in NIfTI format
         output_path (str, optional): Path to save the result (NIfTI). If None, do not save.
+        vtk_output_path (str, optional): Path to save the point cloud (VTK). If None, do not save.
         iterations (int): Number of iterations of the level-set evolution.
 
     Returns:
@@ -166,8 +91,8 @@ def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=
     """
 
     # Load data with SimpleITK
-    img_sitk = sitk.ReadImage(nifti_image_path, sitk.sitkFloat32)  # Convert to float32
-    mask_sitk = sitk.ReadImage(nifti_mask_path, sitk.sitkFloat32)  # Convert to float32
+    img_sitk = sitk.ReadImage(nifti_image_path, sitk.sitkFloat32)
+    mask_sitk = sitk.ReadImage(nifti_mask_path, sitk.sitkFloat32)
 
     # Get the number of timesteps
     num_timesteps = img_sitk.GetSize()[-1]
@@ -192,7 +117,7 @@ def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=
             # Apply the GeodesicActiveContourLevelSet filter
             filter = sitk.GeodesicActiveContourLevelSetImageFilter()
             filter.SetNumberOfIterations(iterations)
-            filter.SetPropagationScaling(1.0)
+            filter.SetPropagationScaling(0.05)
             filter.SetCurvatureScaling(1.0)
             filter.SetAdvectionScaling(1.0)
 
@@ -210,13 +135,53 @@ def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=
     if output_path:
         sitk.WriteImage(result_sitk, output_path)
 
+    # Export the contour as a VTK point cloud
+    if vtk_output_path:
+        for t in range(num_timesteps):
+            # Extract the current timestep
+            segmented_timestep = segmented_timesteps[t]
+
+            # Convert the segmented timestep to a numpy array
+            segmented_array = sitk.GetArrayFromImage(segmented_timestep)
+
+            # Convert the segmented array to 8-bit for Canny edge detection
+            if segmented_array.dtype != np.uint8:
+                segmented_array = np.uint8((segmented_array - segmented_array.min()) / (segmented_array.max() - segmented_array.min()) * 255)
+
+            # Apply Canny edge detection to find the contour
+            edges = cv2.Canny(segmented_array, 0, 1000)  # Adjust thresholds as needed
+
+            # Get the coordinates of the edge points
+            points = np.argwhere(edges > 0)
+
+            vtk_points = vtk.vtkPoints()
+            for point in points:
+                if point.shape[0] == 2:
+                    # Insert the point into the VTK points object with z=0 for 2D points
+                    vtk_points.InsertNextPoint(point[1], point[0], 0)
+                else:
+                    # Insert the point into the VTK points object for 3D points
+                    vtk_points.InsertNextPoint(point[2], point[1], point[0])
+
+            # Create a VTK polydata object and set the points
+            vtk_path = os.path.join(vtk_output_path, f"Seg_Timestep_{t}.vtk")
+            polydata = vtk.vtkPolyData()
+            polydata.SetPoints(vtk_points)
+
+            # Write the polydata to a VTK file
+            writer = vtk.vtkPolyDataWriter()
+            writer.SetFileName(vtk_path)
+            writer.SetInputData(polydata)
+            writer.Write()
+
     return result_sitk
 
 # Test
 affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29.nii"
 mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Segmentation.nii"
-output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
-seg = apply_levelset_seg_simpleitk(affine, mask, output_path, iterations=100)
+nifti_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
+vtk_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+seg = apply_levelset_seg_simpleitk(affine, mask, nifti_output_path, vtk_output_path, iterations=200)
 print("Level set done")
 
 
