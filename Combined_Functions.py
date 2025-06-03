@@ -6,6 +6,9 @@ import itk
 import SimpleITK as sitk
 import os
 import matplotlib.pyplot as plt
+from vtk.util import numpy_support
+import os
+import cv2
 
 from scipy.linalg import svd
 from scipy.interpolate import interp1d
@@ -53,6 +56,15 @@ def read_points_vtk(file_vtk):
     points = polydata.GetPoints()
     return points
 
+# Fonction appliquant la transformee spatiale
+def transformPolyData(polyData, transform):
+
+    t = vtk.vtkTransformPolyDataFilter()
+    t.SetTransform(transform)
+    t.SetInputData(polyData)
+    t.Update()
+    return t.GetOutput()
+
 
 #%% Load curve
 # Script Python pour créer une load curve pour FEBio avec fonction personnalisée
@@ -69,25 +81,16 @@ def generate_load_curve(file_path, func, start=0, end=40, step=1):
             y = func(x)
             f.write(f"{x} {y}\n")
 
-#%%
-import SimpleITK as sitk
-import vtk
-from vtk.util import numpy_support
-import os
-import cv2
-import numpy as np
-
-def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=None, vtk_output_path=None, iterations=100):
+#%% Strategy to extract the contour of a segmentation 
+#2 Steps : Improve the segmentation using a Levelset filter (nifti) + extract the contour of the segmentation (.vtk)
+def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, nifti_output_path=None, vtk_output_path=None, iterations=50):
     """
     Args:
         nifti_image_path (str): Path to original image (.nii or .nii.gz)
         nifti_mask_path (str): Path to the initial segmentation (binary) in NIfTI format
-        output_path (str, optional): Path to save the result (NIfTI). If None, do not save.
+        nifti_output_path (str, optional): Path to save the result (NIfTI). If None, do not save.
         vtk_output_path (str, optional): Path to save the point cloud (VTK). If None, do not save.
         iterations (int): Number of iterations of the level-set evolution.
-
-    Returns:
-        SimpleITK.Image: The resulting segmented image (binary)
     """
 
     # Load data with SimpleITK
@@ -132,8 +135,8 @@ def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=
     result_sitk = sitk.JoinSeries(segmented_timesteps)
 
     # Save the result if output_path is provided
-    if output_path:
-        sitk.WriteImage(result_sitk, output_path)
+    if nifti_output_path:
+        sitk.WriteImage(result_sitk, nifti_output_path)
 
     # Export the contour as a VTK point cloud
     if vtk_output_path:
@@ -144,12 +147,38 @@ def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=
             # Convert the segmented timestep to a numpy array
             segmented_array = sitk.GetArrayFromImage(segmented_timestep)
 
-            # Convert the segmented array to 8-bit for Canny edge detection
-            if segmented_array.dtype != np.uint8:
-                segmented_array = np.uint8((segmented_array - segmented_array.min()) / (segmented_array.max() - segmented_array.min()) * 255)
+            # Check if the data is 2D or 3D
+            if len(segmented_array.shape) == 3:
+                # Determine the plane for 2D slice extraction
+                depth, height, width = segmented_array.shape
+                if depth == 1:
+                    segmented_slice = segmented_array[0, :, :]
+                elif height == 1:
+                    segmented_slice = segmented_array[:, 0, :]
+                elif width == 1:
+                    segmented_slice = segmented_array[:, :, 0]
+                else:
+                    # Default to the first slice along the first dimension if no single slice dimension is found
+                    segmented_slice = segmented_array[0, :, :]
+            else:
+                segmented_slice = segmented_array
+
+            # Normalize the slice to the range [0, 255] and convert to uint8
+            segmented_slice_normalized = ((segmented_slice - segmented_slice.min()) / (segmented_slice.max() - segmented_slice.min()) * 255).astype(np.uint8)
+
+            # # Debug: Visualize the segmented slice
+            # plt.imshow(segmented_slice_normalized, cmap='gray')
+            # plt.title("Segmented Array Slice")
+            # plt.show()
 
             # Apply Canny edge detection to find the contour
-            edges = cv2.Canny(segmented_array, 0, 1000)  # Adjust thresholds as needed
+            edges = cv2.Canny(segmented_slice_normalized, 50, 150)  # Adjust thresholds as needed
+
+            # # Debug : Visualize the edges
+            # plt.imshow(edges, cmap='gray')
+            # plt.title("Edges")
+            # plt.show()
+
 
             # Get the coordinates of the edge points
             points = np.argwhere(edges > 0)
@@ -164,7 +193,7 @@ def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, output_path=
                     vtk_points.InsertNextPoint(point[2], point[1], point[0])
 
             # Create a VTK polydata object and set the points
-            vtk_path = os.path.join(vtk_output_path, f"Seg_Timestep_{t}.vtk")
+            vtk_path = os.path.join(vtk_output_path, f"contour_{t}.vtk")
             polydata = vtk.vtkPolyData()
             polydata.SetPoints(vtk_points)
 
@@ -181,7 +210,7 @@ affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/201609
 mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Segmentation.nii"
 nifti_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
 vtk_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
-seg = apply_levelset_seg_simpleitk(affine, mask, nifti_output_path, vtk_output_path, iterations=200)
+seg = apply_levelset_seg_simpleitk(affine, mask, nifti_output_path, vtk_output_path, iterations=25)
 print("Level set done")
 
 
@@ -196,7 +225,7 @@ def Seg_header(file_path, seg_path, output_path):
 
 
 
-#%%
+#%% Other Strategy to extract the contour of a segmentation using the Gradient methodology. Main issue = Point are ordered based on their z coordinate (noncontinuous curve) + rougher shape
 def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
     """
     nifti_path (str): Path to the original NIfTI file (to extract the affine matrix).
@@ -264,7 +293,7 @@ def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
 
         poly_data_grad.SetPoints(points_grad)
 
-        vtk_path_grad = os.path.join(output_dir, f"gradient_{i}.vtk")
+        vtk_path_grad = os.path.join(output_dir, f"contour_{i}.vtk")
         writer_grad = vtkPolyDataWriter()
         writer_grad.SetFileName(vtk_path_grad)
         writer_grad.SetInputData(poly_data_grad)
@@ -282,20 +311,12 @@ print("vtk conversion done")
 
 
 
-#%% Fonction appliquant la transformee spatiale
-def transformPolyData(polyData, transform):
-
-    t = vtk.vtkTransformPolyDataFilter()
-    t.SetTransform(transform)
-    t.SetInputData(polyData)
-    t.Update()
-    return t.GetOutput()
 
 #%%
 def rotate_vtk(nifti_path, grad_path, output_path, A):
     """
     nifti_path (str): Path to the original NIfTI file (to extract the affine matrix).
-    grad_path (str): Folder for existing gradient_{}.vtk files.
+    grad_path (str): Folder for existing contour_{}.vtk files.
     output_path (str): Output folder for generated .vtk files.
     A (int): Number of timesteps in the model 
     """
@@ -313,7 +334,7 @@ def rotate_vtk(nifti_path, grad_path, output_path, A):
         reader = vtk.vtkPolyDataReader()
         writer = vtk.vtkPolyDataWriter()
 
-        vtk_path_grad = os.path.join(grad_path, f"gradient_{i}.vtk")
+        vtk_path_grad = os.path.join(grad_path, f"contour_{i}.vtk")
         reader.SetFileName(vtk_path_grad)
         reader.Update()
         pd = reader.GetOutput()
@@ -328,14 +349,26 @@ def rotate_vtk(nifti_path, grad_path, output_path, A):
 
 # Test
 nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29.nii"
-grad_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/Test_levelset"
-output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/Test_levelset"
-
+grad_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
 new_vtk = rotate_vtk(nifti_file, grad_path, output_path, 40)
 print("vtk rotation done")
 
 #%%
-def vtk2Dslicer (model_path, output_path, A):
+import os
+import vtk
+import numpy as np
+
+def calculate_scaling_factors(bounds3D, bounds2D):
+    # Calculate the scaling factors for each dimension
+    scaling_factors = [
+        (bounds2D[1] - bounds2D[0]) / (bounds3D[1] - bounds3D[0]),
+        (bounds2D[3] - bounds2D[2]) / (bounds3D[3] - bounds3D[2]),
+        (bounds2D[5] - bounds2D[4]) / (bounds3D[5] - bounds3D[4])
+    ]
+    return scaling_factors
+
+def vtk2Dslicer(model_path, output_path, A):
     """
     model_path (str): Input file for the existing 3D model.
     output_path (str): Output folder for generated .vtk files.
@@ -343,83 +376,170 @@ def vtk2Dslicer (model_path, output_path, A):
     """
     os.makedirs(output_path, exist_ok=True)
 
-
-    for i in range(A):   ##range value is equal to the number of time step, 40 in our case
-        #Reading the 3D model
-        # if i<10 :
-        #     vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t0{i}.vtk")
-        # else :
+    for i in range(A):
         vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk")
-        # print("reading : "+ vtk_path_model)
 
-        # Lire le maillage 3D (Unstructured Grid)
+        # Read the 3D model (Unstructured Grid)
         reader3D = vtk.vtkUnstructuredGridReader()
         reader3D.SetFileName(vtk_path_model)
         reader3D.Update()
 
-        # Si vous avez besoin d’un PolyData pour la coupe :
+        # Convert to PolyData for slicing
         geometryFilter = vtk.vtkGeometryFilter()
         geometryFilter.SetInputData(reader3D.GetOutput())
         geometryFilter.Update()
         polydata3D = geometryFilter.GetOutput()
 
-        #Reading the 2D MRI ##### Boucle for i in range(timestep) a implementer
-        vtk_path_rota = os.path.join(output_path, f"rotated_29_{i}.vtk")
+        # Read the 2D MRI slice
+        vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
         reader2D = vtk.vtkPolyDataReader()
         reader2D.SetFileName(vtk_path_rota)
         reader2D.Update()
         polydata2D = reader2D.GetOutput()
 
-        #Calcul du plan moyen et de sa normale
-        # Récupère les points de la coupe
+        # Get the bounding boxes
+        bounds3D = polydata3D.GetBounds()
+        bounds2D = polydata2D.GetBounds()
+
+        # Calculate scaling factors
+        scaling_factors = calculate_scaling_factors(bounds3D, bounds2D)
+
+        # Apply scaling to the 3D model
+        transform = vtk.vtkTransform()
+        transform.Scale(scaling_factors)
+
+        transformFilter = vtk.vtkTransformPolyDataFilter()
+        transformFilter.SetInputData(polydata3D)
+        transformFilter.SetTransform(transform)
+        transformFilter.Update()
+
+        scaledPolyData3D = transformFilter.GetOutput()
+
+        # Calculate the average plane and its normal from the 2D MRI slice
         points = polydata2D.GetPoints()
         n_points = points.GetNumberOfPoints()
 
-        # Convertit en numpy pour faciliter le calcul
+        # Convert to numpy for easier calculation
         pts = np.array([points.GetPoint(j) for j in range(n_points)])
-
-        # Point moyen du plan
         center = np.mean(pts, axis=0)
 
-        # Estimation de la normale via ACP (analyse en composantes principales)
+        # Estimate the normal via PCA (Principal Component Analysis)
         _, _, vh = np.linalg.svd(pts - center)
-        normal = vh[2]  # La 3e composante (plus faible variance) correspond à la normale
+        normal = vh[2]  # The 3rd component (smallest variance) corresponds to the normal
 
-        #Definition du plan de coupe dans vtk
+        # Define the cutting plane in VTK
         cutPlane = vtk.vtkPlane()
         cutPlane.SetOrigin(center)
         cutPlane.SetNormal(normal)
 
-        #Application de la coupe au modele 3D
+        # Apply the cut to the scaled 3D model
         cutter = vtk.vtkCutter()
         cutter.SetCutFunction(cutPlane)
-        cutter.SetInputData(polydata3D)
+        cutter.SetInputData(scaledPolyData3D)
         cutter.Update()
         cutPolyData = cutter.GetOutput()
-        # print("Type de données sauvegardées :", cutPolyData.GetClassName())
 
-        #Sauvegarde en vtk
+        # Save the slice as a VTK file
         vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
         writer = vtk.vtkPolyDataWriter()
         writer.SetFileName(vtk_path_slice)
         writer.SetInputData(cutPolyData)
         writer.SetFileTypeToASCII()
         writer.Write()
+
     print("vtk2Dslicer - execution completed")
 
+# Test
+path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
+output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+step = 40
+vtk2Dslicer(path_3D, output_path, step)
+print("Model sliced")
 
-# # test
+
+
+# # Old version without rescaling
+# def vtk2Dslicer (model_path, output_path, A):
+#     """
+#     model_path (str): Input file for the existing 3D model.
+#     output_path (str): Output folder for generated .vtk files.
+#     A (int): Number of timesteps in the model
+#     """
+#     os.makedirs(output_path, exist_ok=True)
+
+
+#     for i in range(A):   ##range value is equal to the number of time step, 40 in our case
+#         ### Need improvement##################################################
+#         vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk") ### Need improvement##################################################
+#         # print("reading : ", vtk_path_model)
+
+#         # Lire le maillage 3D (Unstructured Grid)
+#         reader3D = vtk.vtkUnstructuredGridReader()
+#         reader3D.SetFileName(vtk_path_model)
+#         reader3D.Update()
+
+#         # Si vous avez besoin d’un PolyData pour la coupe :
+#         geometryFilter = vtk.vtkGeometryFilter()
+#         geometryFilter.SetInputData(reader3D.GetOutput())
+#         geometryFilter.Update()
+#         polydata3D = geometryFilter.GetOutput()
+
+#         #Reading the 2D MRI ##### Boucle for i in range(timestep) a implementer
+#         vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
+#         reader2D = vtk.vtkPolyDataReader()
+#         reader2D.SetFileName(vtk_path_rota)
+#         reader2D.Update()
+#         polydata2D = reader2D.GetOutput()
+
+#         #Calcul du plan moyen et de sa normale
+#         # Récupère les points de la coupe
+#         points = polydata2D.GetPoints()
+#         n_points = points.GetNumberOfPoints()
+
+#         # Convertit en numpy pour faciliter le calcul
+#         pts = np.array([points.GetPoint(j) for j in range(n_points)])
+
+#         # Point moyen du plan
+#         center = np.mean(pts, axis=0)
+
+#         # Estimation de la normale via ACP (analyse en composantes principales)
+#         _, _, vh = np.linalg.svd(pts - center)
+#         normal = vh[2]  # La 3e composante (plus faible variance) correspond à la normale
+
+#         #Definition du plan de coupe dans vtk
+#         cutPlane = vtk.vtkPlane()
+#         cutPlane.SetOrigin(center)
+#         cutPlane.SetNormal(normal)
+
+#         #Application de la coupe au modele 3D
+#         cutter = vtk.vtkCutter()
+#         cutter.SetCutFunction(cutPlane)
+#         cutter.SetInputData(polydata3D)
+#         cutter.Update()
+#         cutPolyData = cutter.GetOutput()
+#         # print("Type de données sauvegardées :", cutPolyData.GetClassName())
+
+#         #Sauvegarde en vtk
+#         vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
+#         writer = vtk.vtkPolyDataWriter()
+#         writer.SetFileName(vtk_path_slice)
+#         writer.SetInputData(cutPolyData)
+#         writer.SetFileTypeToASCII()
+#         writer.Write()
+#     print("vtk2Dslicer - execution completed")
+
+
+# # # test
 # path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
-# path_out = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
+# output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
 # step = 40
-# vtk2Dslicer(path_3D, path_out, step)
+# vtk2Dslicer(path_3D, output_path, step)
+# print("Model sliced")
 
-
-# %%
+# %% Useful to obtain the coordinate of the center of a 2D shape
 def shape_center(vtk_file):
     """
     vtk_file (str): Input file for the existing 3D model.
-    A (int): Number of timesteps in the model
     """
     # reading the vtk file
     points = read_points_vtk(vtk_file)
@@ -435,26 +555,48 @@ def shape_center(vtk_file):
         centre[2] += point[2]
 
     nmb_points = points.GetNumberOfPoints()
+    # centre = [coord / nmb_points for coord in centre]
     centre[0] /= nmb_points
     centre[1] /= nmb_points
     centre[2] /= nmb_points
-    # print(type(centre))
-    # print(points.GetNumberOfPoints())
+
     return centre
 
-# Example
-# outputfile = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
-# tab = np.empty((0, 3), int)
-# for i in range(40) :
-#     input_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/"
-#     vtk_file = os.path.join(input_path, f"rotated_29_{i}.vtk")
-#     centre = shape_center(vtk_file)
-#     tab = np.vstack([tab, centre])
-    # print("At step ", i, " Coordinates of the aorta centre :", centre)
-# print("la matrice regroupant les centre est : ", tab)
-# quatrieme_ligne = tab[3, :]
-# print("4ème ligne de la matrice :", quatrieme_ligne)
+def calculate_distances(tab_2DMRI, tab_3Dslice):
+    """
+    Calculate the Euclidean distances between corresponding centers in tab_2DMRI and tab_3Dslice.
+    """
+    distances = []
+    for centre_2D, centre_3D in zip(tab_2DMRI, tab_3Dslice):
+        distance = np.linalg.norm(np.array(centre_2D) - np.array(centre_3D))
+        distances.append(distance)
+    return distances
 
+# Example
+input_path_2DMRI="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+input_path_3Dslice="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+tab_2DMRI = np.empty((0, 3), int)
+tab_3Dslice = np.empty((0, 3), int)
+for i in range(40) :
+    # Calculate &stock the coordinates of the center of the 2D MRI shape 
+    vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{i}.vtk")
+    centre_2DMRI = shape_center(vtk_file_2DMRI)
+    tab_2DMRI = np.vstack([tab_2DMRI, centre_2DMRI])
+    # Calculate &stock the coordinates of the center of the 3D model slice
+    vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{i:03d}.vtk")
+    centre_3Dslice = shape_center(vtk_file_3Dslice)
+    tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
+    # print("At step ", i, " Coordinates of the aorta centre :", centre)
+
+# print("la matrice regroupant les centres 2D MRI est : ", tab_2DMRI)
+# print("la matrice regroupant les centres 3D model est : ", tab_3Dslice)
+
+# Calculate distances between centers for each timestep
+distances = calculate_distances(tab_2DMRI, tab_3Dslice)
+
+# Print the distances
+for i, distance in enumerate(distances):
+    print(f"Distance at timestep {i}: {distance}")
 
 
 # %% ################################################
@@ -590,7 +732,7 @@ def kabsch_align(points_A, points_B):
     B_aligned = (B @ R) + points_A.mean(axis=0)
 
     # Optionally reorder points (Ensure a continuous curve)
-    B_aligned=reorder_points(B_aligned)
+    # B_aligned=reorder_points(B_aligned) ################################################## test
     return B_aligned
 
 
@@ -610,10 +752,10 @@ def gap_calculator(points_A, points_B):
 
 ##Test~~~~~
 
-input_path_A = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/rotated_29_2.vtk"
+input_path_A = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/rotated_4.vtk"
 matrice_A = recentrer_points(input_path_A)
 matrice_A = reorder_points(matrice_A)
-input_path_B = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/transverse_slice_002.vtk"
+input_path_B = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/transverse_slice_004.vtk"
 matrice_B = recentrer_points(input_path_B)
 matrice_B = reorder_points(matrice_B)
 
@@ -645,34 +787,6 @@ print("Gap after optimization :", gap_final)
 
 ##### Visualization
 
-# # Creating the figure and 3D axis
-# fig = plt.figure()
-# ax = fig.add_subplot(111, projection='3d')
-
-# # Draw the original contour (line + points)
-# ax.plot(matrice_A_interpolee[:, 0], matrice_A_interpolee[:, 1], matrice_A_interpolee[:, 2], 'r-', alpha=0.6, label='Interpolation A')
-# ax.scatter(matrice_A_interpolee[:, 0], matrice_A_interpolee[:, 1], matrice_A_interpolee[:, 2], c='r', s=20, alpha=0.5)
-
-# # Draw interpolated points and their lines
-# ax.plot(matrice_B_interpolee[:, 0], matrice_B_interpolee[:, 1], matrice_B_interpolee[:, 2],
-#         'b--', label='Interpolation B')
-# ax.scatter(matrice_B_interpolee[:, 0], matrice_B_interpolee[:, 1], matrice_B_interpolee[:, 2],
-#            c='b', s=20)
-
-# # Draw the optimised contour points and their lines
-# ax.plot(matrice_B_opti[:, 0], matrice_B_opti[:, 1], matrice_B_opti[:, 2],
-#         'g--', label='Optimised B')
-# ax.scatter(matrice_B_opti[:, 0], matrice_B_opti[:, 1], matrice_B_opti[:, 2],
-#            c='g', s=20)
-
-# ax.set_title("Interpolation along the 3D contour")
-# ax.set_xlabel("X")
-# ax.set_ylabel("Y")
-# ax.set_zlabel("Z")
-# ax.legend()
-# plt.tight_layout()
-# plt.show()
-
 fig = go.Figure()
 
 # Courbe A (rouge)
@@ -693,14 +807,14 @@ fig.add_trace(go.Scatter3d(
     marker=dict(size=3, color='blue')
 ))
 
-# Courbe B optimisée (vert)
-fig.add_trace(go.Scatter3d(
-    x=matrice_A_opti[:, 0], y=matrice_A_opti[:, 1], z=matrice_A_opti[:, 2],
-    mode='lines+markers',
-    name='Optimised A',
-    line=dict(color='green', dash='dash'),
-    marker=dict(size=3, color='green')
-))
+# # Courbe B optimisée (vert)
+# fig.add_trace(go.Scatter3d(
+#     x=matrice_A_opti[:, 0], y=matrice_A_opti[:, 1], z=matrice_A_opti[:, 2],
+#     mode='lines+markers',
+#     name='Optimised A',
+#     line=dict(color='green', dash='dash'),
+#     marker=dict(size=3, color='green')
+# ))
 
 # Mise en page
 fig.update_layout(
@@ -712,7 +826,7 @@ fig.update_layout(
     ),
     legend=dict(x=0, y=1.5),
     margin=dict(l=0, r=0, b=0, t=30),
-    height=400
+    height=600
 )
 
 fig.show()
