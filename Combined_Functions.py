@@ -66,6 +66,7 @@ def transformPolyData(polyData, transform):
     return t.GetOutput()
 
 
+
 #%% Load curve
 # Script Python pour créer une load curve pour FEBio avec fonction personnalisée
 def generate_load_curve(file_path, func, start=0, end=40, step=1):
@@ -81,6 +82,46 @@ def generate_load_curve(file_path, func, start=0, end=40, step=1):
             y = func(x)
             f.write(f"{x} {y}\n")
 
+
+#%%
+# Python tool  aiming to modify the boundaries of the febio model
+def modify_feb_file(input_file_path, output_file_path, new_boundary_conditions):
+    """
+    Args:
+    input_file path (str): Path to original febio file (.feb)
+    output_file_path (str): Path where the new .feb file with updated boundaries will be saved
+    new_boundary_conditions (str): Listing of the new boundaries. Written to be compatible with febio
+    """
+    with open(input_file_path, 'r') as file:
+        lines = file.readlines()
+
+    with open(output_file_path, 'w') as file:
+        in_boundary_condition_section = False
+
+        for line in lines:
+            if line.strip() == "<BoundaryCondition>" or line.strip() == "<Boundary>":
+                in_boundary_condition_section = True
+                file.write(line)
+                # Write new boundary conditions
+                for condition in new_boundary_conditions:
+                    file.write(f'    <fix id="{condition["id"]}">{condition["values"]}</fix>\n')
+            elif line.strip() == "</BoundaryCondition>" or line.strip() == "</Boundary>":
+                in_boundary_condition_section = False
+                file.write(line)
+            elif not in_boundary_condition_section:
+                file.write(line)
+
+# Example
+input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim.feb"
+output_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim _modified_BC.feb"
+new_boundary_conditions = [
+    {"id": "1", "values": "1,2,3"},
+    {"id": "2", "values": "4,5,6"},
+    # Add other boundary conditions if necessary
+]
+
+modify_feb_file(input_file_path, output_file_path, new_boundary_conditions)
+print("modification done")
 #%% Strategy to extract the contour of a segmentation 
 #2 Steps : Improve the segmentation using a Levelset filter (nifti) + extract the contour of the segmentation (.vtk)
 def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, nifti_output_path=None, vtk_output_path=None, iterations=50):
@@ -224,6 +265,47 @@ def Seg_header(file_path, seg_path, output_path):
     np.save(output_path,affine)
 
 
+#%% 
+## Warning : The interpolator_points function tend to causes issue with complex 3D curves( Creating points in the volume but not along the curves)
+def interpolator_points(points, target_point_number):
+    """
+    points (float) : An array of points to be interpolated.
+    target_point_number : the desired number of points after interpolation.
+    """
+    # Create a linear interpolation for each dimension
+    x = np.linspace(0, 1, points.shape[0])
+    x_new = np.linspace(0, 1, target_point_number)
+
+    # Interpolate each dimension
+    interpolated_points = np.zeros((target_point_number, 3))
+    for i in range(3):
+        f = interp1d(x, points[:, i], kind='linear')
+        interpolated_points[:, i] = f(x_new)
+    ordered_interpolated_points=reorder_points(interpolated_points)
+    return ordered_interpolated_points
+
+# # Use Example
+# new_number_points = min(matrice_A.shape[0], matrice_B.shape[0])
+# matrice_A_interpolee = interpolator_points(matrice_A, new_number_points)
+# matrice_B_interpolee = interpolator_points(matrice_B, new_number_points)
+
+
+def interpolate_along_curve(points, target_point_number):
+    # Calcul des longueurs cumulées (distance curviligne)
+    distances = np.linalg.norm(np.diff(points, axis=0), axis=1)
+    cumulative_dist = np.insert(np.cumsum(distances), 0, 0)
+    cumulative_dist /= cumulative_dist[-1]  # normaliser entre 0 et 1
+
+    # Nouvelles positions uniformément réparties
+    target_distances = np.linspace(0, 1, target_point_number)
+
+    # Interpolation le long de la courbe
+    interpolated_points = np.zeros((target_point_number, 3))
+    for i in range(3):
+        f = interp1d(cumulative_dist, points[:, i], kind='linear')
+        interpolated_points[:, i] = f(target_distances)
+    ordered_interpolated_points=reorder_points(interpolated_points)
+    return ordered_interpolated_points
 
 #%% Other Strategy to extract the contour of a segmentation using the Gradient methodology. Main issue = Point are ordered based on their z coordinate (noncontinuous curve) + rougher shape
 def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
@@ -359,107 +441,16 @@ import os
 import vtk
 import numpy as np
 
-def calculate_scaling_factors(bounds3D, bounds2D):
-    # Calculate the scaling factors for each dimension
-    scaling_factors = [
-        (bounds2D[1] - bounds2D[0]) / (bounds3D[1] - bounds3D[0]),
-        (bounds2D[3] - bounds2D[2]) / (bounds3D[3] - bounds3D[2]),
-        (bounds2D[5] - bounds2D[4]) / (bounds3D[5] - bounds3D[4])
-    ]
-    return scaling_factors
+# def calculate_scaling_factors(bounds3D, bounds2D):
+#     # Calculate the scaling factors for each dimension
+#     scaling_factors = [
+#         (bounds2D[1] - bounds2D[0]) / (bounds3D[1] - bounds3D[0]),
+#         (bounds2D[3] - bounds2D[2]) / (bounds3D[3] - bounds3D[2]),
+#         (bounds2D[5] - bounds2D[4]) / (bounds3D[5] - bounds3D[4])
+#     ]
+#     return scaling_factors
 
-def vtk2Dslicer(model_path, output_path, A):
-    """
-    model_path (str): Input file for the existing 3D model.
-    output_path (str): Output folder for generated .vtk files.
-    A (int): Number of timesteps in the model
-    """
-    os.makedirs(output_path, exist_ok=True)
-
-    for i in range(A):
-        vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk")
-
-        # Read the 3D model (Unstructured Grid)
-        reader3D = vtk.vtkUnstructuredGridReader()
-        reader3D.SetFileName(vtk_path_model)
-        reader3D.Update()
-
-        # Convert to PolyData for slicing
-        geometryFilter = vtk.vtkGeometryFilter()
-        geometryFilter.SetInputData(reader3D.GetOutput())
-        geometryFilter.Update()
-        polydata3D = geometryFilter.GetOutput()
-
-        # Read the 2D MRI slice
-        vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
-        reader2D = vtk.vtkPolyDataReader()
-        reader2D.SetFileName(vtk_path_rota)
-        reader2D.Update()
-        polydata2D = reader2D.GetOutput()
-
-        # Get the bounding boxes
-        bounds3D = polydata3D.GetBounds()
-        bounds2D = polydata2D.GetBounds()
-
-        # Calculate scaling factors
-        scaling_factors = calculate_scaling_factors(bounds3D, bounds2D)
-
-        # Apply scaling to the 3D model
-        transform = vtk.vtkTransform()
-        transform.Scale(scaling_factors)
-
-        transformFilter = vtk.vtkTransformPolyDataFilter()
-        transformFilter.SetInputData(polydata3D)
-        transformFilter.SetTransform(transform)
-        transformFilter.Update()
-
-        scaledPolyData3D = transformFilter.GetOutput()
-
-        # Calculate the average plane and its normal from the 2D MRI slice
-        points = polydata2D.GetPoints()
-        n_points = points.GetNumberOfPoints()
-
-        # Convert to numpy for easier calculation
-        pts = np.array([points.GetPoint(j) for j in range(n_points)])
-        center = np.mean(pts, axis=0)
-
-        # Estimate the normal via PCA (Principal Component Analysis)
-        _, _, vh = np.linalg.svd(pts - center)
-        normal = vh[2]  # The 3rd component (smallest variance) corresponds to the normal
-
-        # Define the cutting plane in VTK
-        cutPlane = vtk.vtkPlane()
-        cutPlane.SetOrigin(center)
-        cutPlane.SetNormal(normal)
-
-        # Apply the cut to the scaled 3D model
-        cutter = vtk.vtkCutter()
-        cutter.SetCutFunction(cutPlane)
-        cutter.SetInputData(scaledPolyData3D)
-        cutter.Update()
-        cutPolyData = cutter.GetOutput()
-
-        # Save the slice as a VTK file
-        vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
-        writer = vtk.vtkPolyDataWriter()
-        writer.SetFileName(vtk_path_slice)
-        writer.SetInputData(cutPolyData)
-        writer.SetFileTypeToASCII()
-        writer.Write()
-
-    print("vtk2Dslicer - execution completed")
-
-# Test
-path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
-output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
-step = 40
-vtk2Dslicer(path_3D, output_path, step)
-print("Model sliced")
-
-
-
-# # Old version without rescaling
-# def vtk2Dslicer (model_path, output_path, A):
+# def vtk2Dslicer(model_path, output_path, A):
 #     """
 #     model_path (str): Input file for the existing 3D model.
 #     output_path (str): Output folder for generated .vtk files.
@@ -467,74 +458,167 @@ print("Model sliced")
 #     """
 #     os.makedirs(output_path, exist_ok=True)
 
+#     for i in range(A):
+#         vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk")
 
-#     for i in range(A):   ##range value is equal to the number of time step, 40 in our case
-#         ### Need improvement##################################################
-#         vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk") ### Need improvement##################################################
-#         # print("reading : ", vtk_path_model)
-
-#         # Lire le maillage 3D (Unstructured Grid)
+#         # Read the 3D model (Unstructured Grid)
 #         reader3D = vtk.vtkUnstructuredGridReader()
 #         reader3D.SetFileName(vtk_path_model)
 #         reader3D.Update()
 
-#         # Si vous avez besoin d’un PolyData pour la coupe :
+#         # Convert to PolyData for slicing
 #         geometryFilter = vtk.vtkGeometryFilter()
 #         geometryFilter.SetInputData(reader3D.GetOutput())
 #         geometryFilter.Update()
 #         polydata3D = geometryFilter.GetOutput()
 
-#         #Reading the 2D MRI ##### Boucle for i in range(timestep) a implementer
+#         # Read the 2D MRI slice
 #         vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
 #         reader2D = vtk.vtkPolyDataReader()
 #         reader2D.SetFileName(vtk_path_rota)
 #         reader2D.Update()
 #         polydata2D = reader2D.GetOutput()
 
-#         #Calcul du plan moyen et de sa normale
-#         # Récupère les points de la coupe
+#         # Get the bounding boxes
+#         bounds3D = polydata3D.GetBounds()
+#         bounds2D = polydata2D.GetBounds()
+
+#         # Calculate scaling factors
+#         scaling_factors = calculate_scaling_factors(bounds3D, bounds2D)
+
+#         # Apply scaling to the 3D model
+#         transform = vtk.vtkTransform()
+#         transform.Scale(scaling_factors)
+
+#         transformFilter = vtk.vtkTransformPolyDataFilter()
+#         transformFilter.SetInputData(polydata3D)
+#         transformFilter.SetTransform(transform)
+#         transformFilter.Update()
+
+#         scaledPolyData3D = transformFilter.GetOutput()
+
+#         # Calculate the average plane and its normal from the 2D MRI slice
 #         points = polydata2D.GetPoints()
 #         n_points = points.GetNumberOfPoints()
 
-#         # Convertit en numpy pour faciliter le calcul
+#         # Convert to numpy for easier calculation
 #         pts = np.array([points.GetPoint(j) for j in range(n_points)])
-
-#         # Point moyen du plan
 #         center = np.mean(pts, axis=0)
 
-#         # Estimation de la normale via ACP (analyse en composantes principales)
+#         # Estimate the normal via PCA (Principal Component Analysis)
 #         _, _, vh = np.linalg.svd(pts - center)
-#         normal = vh[2]  # La 3e composante (plus faible variance) correspond à la normale
+#         normal = vh[2]  # The 3rd component (smallest variance) corresponds to the normal
 
-#         #Definition du plan de coupe dans vtk
+#         # Define the cutting plane in VTK
 #         cutPlane = vtk.vtkPlane()
 #         cutPlane.SetOrigin(center)
 #         cutPlane.SetNormal(normal)
 
-#         #Application de la coupe au modele 3D
+#         # Apply the cut to the scaled 3D model
 #         cutter = vtk.vtkCutter()
 #         cutter.SetCutFunction(cutPlane)
-#         cutter.SetInputData(polydata3D)
+#         cutter.SetInputData(scaledPolyData3D)
 #         cutter.Update()
 #         cutPolyData = cutter.GetOutput()
-#         # print("Type de données sauvegardées :", cutPolyData.GetClassName())
 
-#         #Sauvegarde en vtk
+#         # Save the slice as a VTK file
 #         vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
 #         writer = vtk.vtkPolyDataWriter()
 #         writer.SetFileName(vtk_path_slice)
 #         writer.SetInputData(cutPolyData)
 #         writer.SetFileTypeToASCII()
 #         writer.Write()
+
 #     print("vtk2Dslicer - execution completed")
 
-
-# # # test
+# # Test
 # path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
-# output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+# output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
 # step = 40
 # vtk2Dslicer(path_3D, output_path, step)
 # print("Model sliced")
+
+
+
+# Old version without rescaling
+def vtk2Dslicer (model_path, output_path, A):
+    """
+    model_path (str): Input file for the existing 3D model.
+    output_path (str): Output folder for generated .vtk files.
+    A (int): Number of timesteps in the model
+    """
+    os.makedirs(output_path, exist_ok=True)
+
+
+    for i in range(A):   ##range value is equal to the number of time step, 40 in our case
+        ### Need improvement##################################################
+        vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk") ### Need improvement##################################################
+        # print("reading : ", vtk_path_model)
+
+        # Lire le maillage 3D (Unstructured Grid)
+        reader3D = vtk.vtkUnstructuredGridReader()
+        reader3D.SetFileName(vtk_path_model)
+        reader3D.Update()
+
+        # Si vous avez besoin d’un PolyData pour la coupe :
+        geometryFilter = vtk.vtkGeometryFilter()
+        geometryFilter.SetInputData(reader3D.GetOutput())
+        geometryFilter.Update()
+        polydata3D = geometryFilter.GetOutput()
+
+        #Reading the 2D MRI ##### Boucle for i in range(timestep) a implementer
+        vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
+        reader2D = vtk.vtkPolyDataReader()
+        reader2D.SetFileName(vtk_path_rota)
+        reader2D.Update()
+        polydata2D = reader2D.GetOutput()
+
+        #Calcul du plan moyen et de sa normale
+        # Récupère les points de la coupe
+        points = polydata2D.GetPoints()
+        n_points = points.GetNumberOfPoints()
+
+        # Convertit en numpy pour faciliter le calcul
+        pts = np.array([points.GetPoint(j) for j in range(n_points)])
+
+        # Point moyen du plan
+        center = np.mean(pts, axis=0)
+
+        # Estimation de la normale via ACP (analyse en composantes principales)
+        _, _, vh = np.linalg.svd(pts - center)
+        normal = vh[2]  # La 3e composante (plus faible variance) correspond à la normale
+
+        #Definition du plan de coupe dans vtk
+        cutPlane = vtk.vtkPlane()
+        cutPlane.SetOrigin(center)
+        cutPlane.SetNormal(normal)
+
+        #Application de la coupe au modele 3D
+        cutter = vtk.vtkCutter()
+        cutter.SetCutFunction(cutPlane)
+        cutter.SetInputData(polydata3D)
+        cutter.Update()
+        cutPolyData = cutter.GetOutput()
+        # print("Type de données sauvegardées :", cutPolyData.GetClassName())
+
+        #Sauvegarde en vtk
+        vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
+        writer = vtk.vtkPolyDataWriter()
+        writer.SetFileName(vtk_path_slice)
+        writer.SetInputData(cutPolyData)
+        writer.SetFileTypeToASCII()
+        writer.Write()
+    print("vtk2Dslicer - execution completed")
+
+
+# # test
+path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
+output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+step = 40
+vtk2Dslicer(path_3D, output_path, step)
+print("Model sliced")
+
+
 
 # %% Useful to obtain the coordinate of the center of a 2D shape
 def shape_center(vtk_file):
@@ -572,11 +656,33 @@ def calculate_distances(tab_2DMRI, tab_3Dslice):
         distances.append(distance)
     return distances
 
+
+def gap_calculator_array(points_A, points_B):
+    gap = np.linalg.norm(points_A - points_B)
+    return gap
+
+def gap_calculator_vtk(points_A, points_B):
+    # Extraire les coordonnées des points
+    coords_A = np.array([points_A.GetPoint(i) for i in range(points_A.GetNumberOfPoints())])
+    coords_B = np.array([points_B.GetPoint(i) for i in range(points_B.GetNumberOfPoints())])
+
+    # Interpolate the matrix
+    new_number_points = min(coords_A.shape[0], coords_B.shape[0])
+    if new_number_points == coords_A.shape[0] :
+        coords_B = interpolate_along_curve(coords_B, new_number_points)
+    else :
+        coords_A = interpolate_along_curve(coords_A, new_number_points)
+    # Calculer la différence et la norme
+    gap = np.linalg.norm(coords_A - coords_B)
+    return gap
+
+
 # Example
 input_path_2DMRI="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
 input_path_3Dslice="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
 tab_2DMRI = np.empty((0, 3), int)
 tab_3Dslice = np.empty((0, 3), int)
+tab_gap= np.empty((0, 3), int)
 for i in range(40) :
     # Calculate &stock the coordinates of the center of the 2D MRI shape 
     vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{i}.vtk")
@@ -587,6 +693,11 @@ for i in range(40) :
     centre_3Dslice = shape_center(vtk_file_3Dslice)
     tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
     # print("At step ", i, " Coordinates of the aorta centre :", centre)
+    points_2DMRI=read_points_vtk(vtk_file_2DMRI)
+    points_3Dslice=read_points_vtk(vtk_file_3Dslice)
+    gap_2DMRI_3D = gap_calculator_vtk(points_2DMRI, points_3Dslice)
+    print(f"Gap value at Timestep {i}: {gap_2DMRI_3D}")
+    tab_gap= np.vstack([tab_gap, centre_3Dslice])
 
 # print("la matrice regroupant les centres 2D MRI est : ", tab_2DMRI)
 # print("la matrice regroupant les centres 3D model est : ", tab_3Dslice)
@@ -659,47 +770,7 @@ def recentrer_points(file_vtk):
 # print(matrice)
 
 
-#%% 
-## Warning : The interpolator_points function tend to causes issue with complex 3D curves( Creating points in the volume but not along the curves)
-def interpolator_points(points, target_point_number):
-    """
-    points (float) : An array of points to be interpolated.
-    target_point_number : the desired number of points after interpolation.
-    """
-    # Create a linear interpolation for each dimension
-    x = np.linspace(0, 1, points.shape[0])
-    x_new = np.linspace(0, 1, target_point_number)
 
-    # Interpolate each dimension
-    interpolated_points = np.zeros((target_point_number, 3))
-    for i in range(3):
-        f = interp1d(x, points[:, i], kind='linear')
-        interpolated_points[:, i] = f(x_new)
-    ordered_interpolated_points=reorder_points(interpolated_points)
-    return ordered_interpolated_points
-
-# # Use Example
-# new_number_points = min(matrice_A.shape[0], matrice_B.shape[0])
-# matrice_A_interpolee = interpolator_points(matrice_A, new_number_points)
-# matrice_B_interpolee = interpolator_points(matrice_B, new_number_points)
-
-
-def interpolate_along_curve(points, target_point_number):
-    # Calcul des longueurs cumulées (distance curviligne)
-    distances = np.linalg.norm(np.diff(points, axis=0), axis=1)
-    cumulative_dist = np.insert(np.cumsum(distances), 0, 0)
-    cumulative_dist /= cumulative_dist[-1]  # normaliser entre 0 et 1
-
-    # Nouvelles positions uniformément réparties
-    target_distances = np.linspace(0, 1, target_point_number)
-
-    # Interpolation le long de la courbe
-    interpolated_points = np.zeros((target_point_number, 3))
-    for i in range(3):
-        f = interp1d(cumulative_dist, points[:, i], kind='linear')
-        interpolated_points[:, i] = f(target_distances)
-    ordered_interpolated_points=reorder_points(interpolated_points)
-    return ordered_interpolated_points
 
 #%%
 ######################################
@@ -745,9 +816,6 @@ def project_to_plane(points, normal, point_on_plane):
     distances = np.dot(vectors, normal)
     return points - np.outer(distances, normal)
 
-def gap_calculator(points_A, points_B):
-    gap = np.linalg.norm(points_A - points_B)
-    return gap
 
 
 ##Test~~~~~
@@ -769,7 +837,7 @@ matrice_B_interpolee = interpolate_along_curve(matrice_B, new_number_points)
 ############# Optimisation
 
 # Calculate the original residual gap
-gap_init = gap_calculator(matrice_A_interpolee, matrice_B_interpolee)
+gap_init = gap_calculator_array(matrice_A_interpolee, matrice_B_interpolee)
 print("Gap before optimization :", gap_init)
 
 matrice_A_opti = kabsch_align(matrice_B_interpolee, matrice_A_interpolee)
@@ -780,7 +848,7 @@ matrice_A_opti = kabsch_align(matrice_B_interpolee, matrice_A_interpolee)
 # matrice_B_opti = project_to_plane(matrice_B_opti, plane_normal, plane_point)
 
 # Calculate the final residual gap
-gap_final = gap_calculator(matrice_B_interpolee, matrice_A_opti)
+gap_final = gap_calculator_array(matrice_B_interpolee, matrice_A_opti)
 print("Gap after optimization :", gap_final)
 
 
