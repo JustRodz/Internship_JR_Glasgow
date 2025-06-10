@@ -113,15 +113,113 @@ def modify_feb_file(input_file_path, output_file_path, new_boundary_conditions):
 
 # Example
 input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim.feb"
-output_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim _modified_BC.feb"
+output_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim _modified_BC_CrashTesting.feb"
 new_boundary_conditions = [
-    {"id": "1", "values": "1,2,3"},
-    {"id": "2", "values": "4,5,6"},
+    {bc name="ZeroDisplacement1" node_set="@edge:ZeroDisplacement1" type="zero displacement"},
+    {x_dof>1</x_dof},
+    {y_dof>1</y_dof},
+    {z_dof>1</z_dof},
+    {bc},
+    {bc type="prescribed displacement" node_set="set1"},
+    {dof>x</dof},
+    {value lc="1">1.0</value},
+    {relative>0</relative},
+    {bc},
     # Add other boundary conditions if necessary
 ]
 
 modify_feb_file(input_file_path, output_file_path, new_boundary_conditions)
 print("modification done")
+
+#%%
+import re
+#Test to target the node_set related to precribed displacement B.C
+
+def find_presc_disp_node(feb_file_path):
+    with open(feb_file_path, 'r') as file:
+        content = file.read()
+
+    bc_pattern = re.compile(r'<bc name="(\w+)" node_set="@edge:(\w+)" type="prescribed displacement">')
+    node_sets = bc_pattern.findall(content)
+    return node_sets
+
+def extract_node_coordinates(feb_file_path):
+    with open(feb_file_path, 'r') as file:
+        content = file.read()
+
+    node_pattern = re.compile(r'<node id="(\d+)">([-\d.\s,]+)</node>')
+    nodes = node_pattern.findall(content)
+
+    node_coordinates = {}
+    for node_id, coords in nodes:
+        coords = np.array([float(c) for c in coords.split(',')])
+        node_coordinates[int(node_id)] = coords
+
+    return node_coordinates
+
+def are_coplanar(points):
+    if len(points) < 3:
+        return False
+
+    v1 = points[1] - points[0]
+    v2 = points[2] - points[0]
+    normal_vector = np.cross(v1, v2)
+
+    for point in points[3:]:
+        if not np.isclose(np.dot(normal_vector, point - points[0]), 0):
+            return False
+
+    return True
+
+def extract_nodeset_data(feb_file_path, node_sets):
+    node_coordinates = extract_node_coordinates(feb_file_path)
+
+    with open(feb_file_path, 'r') as file:
+        data = file.read()
+
+    
+    bc_data = []
+    for bc_name, node_set_name in node_sets:
+        # Locating the Edges markers
+        edge_pattern = re.compile(rf'<Edge name="{node_set_name}">(.*?)</Edge>', re.DOTALL)
+        edge_match = edge_pattern.search(data)
+
+        node_data = []
+        if edge_match:
+            edge_content = edge_match.group(1)
+
+            # Finding nodes ids
+            line_pattern = re.compile(r'<line2 id="(\d+)">(\d+),(\d+)</line2>')
+            line_matches = line_pattern.findall(edge_content)
+
+            # Adding nodes ids
+            for match in line_matches:
+                line_id, node1, node2 = match
+                node_data.append(int(node1))
+                node_data.append(int(node2))
+
+        node_data = list(set(node_data))  # Suppress duplicates    
+        #Obtain coords
+        points = [node_coordinates[node_id] for node_id in node_data]
+        #Checking coplannarity
+        coplanar = are_coplanar(points)
+
+        bc_data.append([bc_name, [node_data], coplanar])
+
+    return bc_data
+
+        
+
+input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim _Modified_BC.feb"
+node_of_interest=find_presc_disp_node(input_file_path)
+nodes_data= extract_nodeset_data(input_file_path, node_of_interest)
+print(node_of_interest)
+print("Finished the search")
+print(nodes_data)
+print("Finished extracting node`s data")
+print(nodes_data[1])
+print(extract_node_coordinates(input_file_path))
+
 #%% Strategy to extract the contour of a segmentation 
 #2 Steps : Improve the segmentation using a Levelset filter (nifti) + extract the contour of the segmentation (.vtk)
 def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, nifti_output_path=None, vtk_output_path=None, iterations=50):
@@ -247,10 +345,10 @@ def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, nifti_output
     return result_sitk
 
 # Test
-affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29.nii"
-mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Segmentation.nii"
-nifti_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
-vtk_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29.nii"
+mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29_Segmentation.nii"
+nifti_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
+vtk_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
 seg = apply_levelset_seg_simpleitk(affine, mask, nifti_output_path, vtk_output_path, iterations=25)
 print("Level set done")
 
@@ -384,10 +482,10 @@ def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
 
 
 # Test
-nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29.nii"
-nifti_seg = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
-output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/Test_levelset"
-header_file="C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/Test_levelset/test_niftiheader_29_levelset.npy"
+nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29.nii"
+nifti_seg = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29_Segmentation.nii"
+output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
+header_file="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/test_niftiheader_29.npy"
 new_vtk = Seg2Contours(nifti_file, nifti_seg, output_path, header_file)
 print("vtk conversion done")
 
@@ -430,9 +528,9 @@ def rotate_vtk(nifti_path, grad_path, output_path, A):
         writer.Write()
 
 # Test
-nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/20160906131917_AO_SINUS_STACK_CINES_29.nii"
-grad_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
-output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29.nii"
+grad_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
+output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
 new_vtk = rotate_vtk(nifti_file, grad_path, output_path, 40)
 print("vtk rotation done")
 
@@ -533,7 +631,7 @@ import numpy as np
 
 # # Test
 # path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
-# output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+# output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
 # step = 40
 # vtk2Dslicer(path_3D, output_path, step)
 # print("Model sliced")
@@ -613,7 +711,7 @@ def vtk2Dslicer (model_path, output_path, A):
 
 # # test
 path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
-output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
 step = 40
 vtk2Dslicer(path_3D, output_path, step)
 print("Model sliced")
@@ -678,8 +776,8 @@ def gap_calculator_vtk(points_A, points_B):
 
 
 # Example
-input_path_2DMRI="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
-input_path_3Dslice="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/"
+input_path_2DMRI="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
+input_path_3Dslice="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
 tab_2DMRI = np.empty((0, 3), int)
 tab_3Dslice = np.empty((0, 3), int)
 tab_gap= np.empty((0, 3), int)
@@ -820,10 +918,10 @@ def project_to_plane(points, normal, point_on_plane):
 
 ##Test~~~~~
 
-input_path_A = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/rotated_4.vtk"
+input_path_A = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/rotated_4.vtk"
 matrice_A = recentrer_points(input_path_A)
 matrice_A = reorder_points(matrice_A)
-input_path_B = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29_vtk/transverse_slice_004.vtk"
+input_path_B = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/transverse_slice_004.vtk"
 matrice_B = recentrer_points(input_path_B)
 matrice_B = reorder_points(matrice_B)
 
