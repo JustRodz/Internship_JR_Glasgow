@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from vtk.util import numpy_support
 import os
 import cv2
+import xml.etree.ElementTree as ET
+import re
 
 from scipy.linalg import svd
 from scipy.interpolate import interp1d
@@ -114,25 +116,20 @@ def modify_feb_file(input_file_path, output_file_path, new_boundary_conditions):
 # Example
 input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim.feb"
 output_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim _modified_BC_CrashTesting.feb"
-new_boundary_conditions = [
-    {bc name="ZeroDisplacement1" node_set="@edge:ZeroDisplacement1" type="zero displacement"},
-    {x_dof>1</x_dof},
-    {y_dof>1</y_dof},
-    {z_dof>1</z_dof},
-    {bc},
-    {bc type="prescribed displacement" node_set="set1"},
-    {dof>x</dof},
-    {value lc="1">1.0</value},
-    {relative>0</relative},
-    {bc},
-    # Add other boundary conditions if necessary
+new_boundary_conditions =  [
+    {"content": '<bc name="ZeroDisplacement1" node_set="@edge:ZeroDisplacement1" type="zero displacement"><x_dof>1</x_dof><y_dof>1</y_dof><z_dof>1</z_dof></bc>'},
+    {"content": '<bc name="PrescribedDisplacement2" node_set="@edge:PrescribedDisplacement2" type="prescribed displacement"><dof>x</dof><value lc="3">1</value><relative>0</relative></bc>'},
+    {"content": '<bc name="PrescribedDisplacement3" node_set="@edge:PrescribedDisplacement3" type="prescribed displacement"><dof>y</dof><value lc="3">0</value><relative>0</relative></bc>'},
+    {"content": '<bc name="PrescribedDisplacement4" node_set="@edge:PrescribedDisplacement4" type="prescribed displacement"><dof>z</dof><value lc="3">0</value><relative>0</relative></bc>'}
 ]
+    # Add other boundary conditions if necessary
 
 modify_feb_file(input_file_path, output_file_path, new_boundary_conditions)
 print("modification done")
 
-#%%
-import re
+
+#%% Calculate the normal vector and acquire data on the BC
+
 #Test to target the node_set related to precribed displacement B.C
 
 def find_presc_disp_node(feb_file_path):
@@ -157,20 +154,52 @@ def extract_node_coordinates(feb_file_path):
 
     return node_coordinates
 
-def are_coplanar(points):
-    if len(points) < 3:
-        return False
+### the input correspond with the node_coordinates shape
+def calculate_svd_normal(points):
+    """
+    points: np.ndarray of shape (N, 3) - reference point cloud
+    """
+    # Center both point cloud around their centroids
+    centered_points = points - np.mean(points, axis=0)
 
-    v1 = points[1] - points[0]
-    v2 = points[2] - points[0]
-    normal_vector = np.cross(v1, v2)
+    # Compute covariance matrix
+    cov_matrix = np.cov(centered_points, rowvar=False)
+    # print(cov_matrix)
+    # Singular Value Decomposition (SVD)
+    U, S, Vt = np.linalg.svd(cov_matrix)
 
-    for point in points[3:]:
-        if not np.isclose(np.dot(normal_vector, point - points[0]), 0):
-            return False
+    # normal/direction vector
+    normal_vector= Vt[-1,:]
+    normal_vector = normal_vector/np.linalg.norm(normal_vector)
+    
+    return normal_vector     
 
-    return True
 
+# Creating the coordinate system associated with
+def create_coordinate_system(center, normal_vector, points):
+
+    # Normalize the normal vector to get the Z-axis
+    z_axis = normal_vector / np.linalg.norm(normal_vector)
+
+    # Calculate a temporary X-axis vector
+    first_point = points[0]
+    temp_x_axis = first_point - center
+
+    # Normalize the temporary X-axis vector to get the X-axis
+    x_axis = temp_x_axis / np.linalg.norm(temp_x_axis)
+
+    # Calculate the Y-axis using the cross product of Z and X axes
+    y_axis = np.cross(z_axis, x_axis)
+    y_axis = y_axis / np.linalg.norm(y_axis)
+
+    # Ensure the X-axis is orthogonal to both Z and Y axes
+    x_axis = np.cross(y_axis, z_axis)
+    x_axis = x_axis / np.linalg.norm(x_axis)
+
+    return np.array([x_axis, y_axis, z_axis])
+
+
+# Extract the data from the nodeset associated with the B.C
 def extract_nodeset_data(feb_file_path, node_sets):
     node_coordinates = extract_node_coordinates(feb_file_path)
 
@@ -199,158 +228,68 @@ def extract_nodeset_data(feb_file_path, node_sets):
                 node_data.append(int(node2))
 
         node_data = list(set(node_data))  # Suppress duplicates    
-        #Obtain coords
-        points = [node_coordinates[node_id] for node_id in node_data]
-        #Checking coplannarity
-        coplanar = are_coplanar(points)
 
-        bc_data.append([bc_name, [node_data], coplanar])
+        #Obtain coords
+        points = np.array([node_coordinates[node_id] for node_id in node_data])
+        #calculate the center
+        center =np.mean(points, axis=0)
+        #Calculate the normal vector
+        normal_vector = calculate_svd_normal(points)
+        #Calculate the coordinate system associated with the B.C
+        coordinate_system = create_coordinate_system(center, normal_vector, points)
+        # print("Coordinate System:\n", coordinate_system)
+        bc_data.append([bc_name, normal_vector, center, coordinate_system])
 
     return bc_data
 
-        
 
-input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim _Modified_BC.feb"
+input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim.feb"
 node_of_interest=find_presc_disp_node(input_file_path)
 nodes_data= extract_nodeset_data(input_file_path, node_of_interest)
+node_coordinates = extract_node_coordinates(input_file_path)
+print("Coordinates :")
 print(node_of_interest)
 print("Finished the search")
-print(nodes_data)
+print(nodes_data[0])
 print("Finished extracting node`s data")
-print(nodes_data[1])
-print(extract_node_coordinates(input_file_path))
-
-#%% Strategy to extract the contour of a segmentation 
-#2 Steps : Improve the segmentation using a Levelset filter (nifti) + extract the contour of the segmentation (.vtk)
-def apply_levelset_seg_simpleitk(nifti_image_path, nifti_mask_path, nifti_output_path=None, vtk_output_path=None, iterations=50):
-    """
-    Args:
-        nifti_image_path (str): Path to original image (.nii or .nii.gz)
-        nifti_mask_path (str): Path to the initial segmentation (binary) in NIfTI format
-        nifti_output_path (str, optional): Path to save the result (NIfTI). If None, do not save.
-        vtk_output_path (str, optional): Path to save the point cloud (VTK). If None, do not save.
-        iterations (int): Number of iterations of the level-set evolution.
-    """
-
-    # Load data with SimpleITK
-    img_sitk = sitk.ReadImage(nifti_image_path, sitk.sitkFloat32)
-    mask_sitk = sitk.ReadImage(nifti_mask_path, sitk.sitkFloat32)
-
-    # Get the number of timesteps
-    num_timesteps = img_sitk.GetSize()[-1]
-
-    # Initialize a list to store the segmented timesteps
-    segmented_timesteps = []
-
-    # Iterate over each timestep
-    for t in range(num_timesteps):
-        # Extract the current timestep
-        img_timestep = img_sitk[:, :, :, t]
-        mask_timestep = mask_sitk[:, :, :, t]
-
-        # Iterate over each 2D slice in the timestep
-        num_slices = img_timestep.GetSize()[-1]
-        segmented_slices = []
-
-        for s in range(num_slices):
-            img_slice = img_timestep[:, :, s]
-            mask_slice = mask_timestep[:, :, s]
-
-            # Apply the GeodesicActiveContourLevelSet filter
-            filter = sitk.GeodesicActiveContourLevelSetImageFilter()
-            filter.SetNumberOfIterations(iterations)
-            filter.SetPropagationScaling(0.05)
-            filter.SetCurvatureScaling(1.0)
-            filter.SetAdvectionScaling(1.0)
-
-            result_slice = filter.Execute(mask_slice, img_slice)
-            segmented_slices.append(result_slice)
-
-        # Combine the segmented slices into a single timestep
-        segmented_timestep = sitk.JoinSeries(segmented_slices)
-        segmented_timesteps.append(segmented_timestep)
-
-    # Combine the segmented timesteps into a single 4D image
-    result_sitk = sitk.JoinSeries(segmented_timesteps)
-
-    # Save the result if output_path is provided
-    if nifti_output_path:
-        sitk.WriteImage(result_sitk, nifti_output_path)
-
-    # Export the contour as a VTK point cloud
-    if vtk_output_path:
-        for t in range(num_timesteps):
-            # Extract the current timestep
-            segmented_timestep = segmented_timesteps[t]
-
-            # Convert the segmented timestep to a numpy array
-            segmented_array = sitk.GetArrayFromImage(segmented_timestep)
-
-            # Check if the data is 2D or 3D
-            if len(segmented_array.shape) == 3:
-                # Determine the plane for 2D slice extraction
-                depth, height, width = segmented_array.shape
-                if depth == 1:
-                    segmented_slice = segmented_array[0, :, :]
-                elif height == 1:
-                    segmented_slice = segmented_array[:, 0, :]
-                elif width == 1:
-                    segmented_slice = segmented_array[:, :, 0]
-                else:
-                    # Default to the first slice along the first dimension if no single slice dimension is found
-                    segmented_slice = segmented_array[0, :, :]
-            else:
-                segmented_slice = segmented_array
-
-            # Normalize the slice to the range [0, 255] and convert to uint8
-            segmented_slice_normalized = ((segmented_slice - segmented_slice.min()) / (segmented_slice.max() - segmented_slice.min()) * 255).astype(np.uint8)
-
-            # # Debug: Visualize the segmented slice
-            # plt.imshow(segmented_slice_normalized, cmap='gray')
-            # plt.title("Segmented Array Slice")
-            # plt.show()
-
-            # Apply Canny edge detection to find the contour
-            edges = cv2.Canny(segmented_slice_normalized, 50, 150)  # Adjust thresholds as needed
-
-            # # Debug : Visualize the edges
-            # plt.imshow(edges, cmap='gray')
-            # plt.title("Edges")
-            # plt.show()
+# print(node_coordinates)
+# # print(node_coordinates)
 
 
-            # Get the coordinates of the edge points
-            points = np.argwhere(edges > 0)
 
-            vtk_points = vtk.vtkPoints()
-            for point in points:
-                if point.shape[0] == 2:
-                    # Insert the point into the VTK points object with z=0 for 2D points
-                    vtk_points.InsertNextPoint(point[1], point[0], 0)
-                else:
-                    # Insert the point into the VTK points object for 3D points
-                    vtk_points.InsertNextPoint(point[2], point[1], point[0])
+#%% Useful to modify the values of a specified B.C
+def update_BC_parameters(febio_file, boundary_name, updates):
+    # Load the XML file
+    tree = ET.parse(febio_file)
+    root = tree.getroot()
 
-            # Create a VTK polydata object and set the points
-            vtk_path = os.path.join(vtk_output_path, f"contour_{t}.vtk")
-            polydata = vtk.vtkPolyData()
-            polydata.SetPoints(vtk_points)
+    # Iterate through all boundary conditions
+    for bc in root.iter('bc'):
+        if bc.attrib.get('type') == 'prescribed displacement' and bc.attrib['name'] == boundary_name:
+            # Update the 'lc' attribute in the 'value' element (associated load curve)
+            value_element = bc.find('value')
+            if value_element is not None and 'lc' in updates:
+                value_element.set('lc', str(updates['lc']))
 
-            # Write the polydata to a VTK file
-            writer = vtk.vtkPolyDataWriter()
-            writer.SetFileName(vtk_path)
-            writer.SetInputData(polydata)
-            writer.Write()
+            # Update the 'initial_value' attribute in the 'value' element (initial value of the prescribed element)
+            value_element = bc.find('value')
+            if value_element is not None and 'initial_value' in updates:
+                value_element.text = str(updates['initial_value'])
 
-    return result_sitk
+            # Update the 'relative' element
+            relative_element = bc.find('relative')
+            if relative_element is not None and 'relative' in updates:
+                relative_element.text = str(updates['relative'])
 
-# Test
-affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29.nii"
-mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29_Segmentation.nii"
-nifti_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29_Seg_levelset.nii"
-vtk_output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
-seg = apply_levelset_seg_simpleitk(affine, mask, nifti_output_path, vtk_output_path, iterations=25)
-print("Level set done")
+    # Write the updated XML back to the file
+    with open(febio_file, 'w') as f:
+        f.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
+        tree.write(f, encoding='unicode')
+
+
+updates = {'initial_value': 7, 'relative': 0}
+file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
+update_BC_parameters(file_path, "PrescribedDisplacement2", updates)
 
 
 
@@ -361,6 +300,47 @@ def Seg_header(file_path, seg_path, output_path):
     mask = nib.load(seg_path).get_fdata()  ##Get_fdata transforms NifTy image data into a NumPy array
     ##plt.imshow(mask[:,:,0,0])
     np.save(output_path,affine)
+
+#%% LVOT
+def LvotSeg2vtk(nifti_path, segmentation_path, output_dir):
+    affine = nib.load(nifti_path).affine  ##retrieves the affine transformation matrix from the NIfTI file (image coord -> IRL coord)
+    mask = nib.load(segmentation_path).get_fdata()
+    # Plot each label in the mask, with larger images
+    num_labels = int(mask.max())
+    for label in range(1, num_labels + 1):
+        for i in range(mask.shape[3]):
+            label_mask = (mask[:, :, :, i] == label)
+            matrix = mask[:, :, :, i]
+            # plt.figure(figsize=(4, 4))
+            # plt.imshow(label_mask, cmap='gray')
+            # plt.title(f'Label {label}', fontsize=20)
+            # plt.axis('off')
+            # plt.show()
+
+            # Extraction des points
+
+            nonzero_indices = np.column_stack(np.nonzero(label_mask))
+
+            poly_data_raw = vtkPolyData()
+            points_raw = vtkPoints()
+
+            for j, (x, y, z) in enumerate(nonzero_indices):
+                points_raw.InsertPoint(j, (x, y, z))
+
+            poly_data_raw.SetPoints(points_raw)
+
+            vtk_path_raw = os.path.join(output_dir, f"surface_{label}_time_{i}.vtk")
+            writer_raw = vtkPolyDataWriter()
+            writer_raw.SetFileName(vtk_path_raw)
+            writer_raw.SetInputData(poly_data_raw)
+            writer_raw.Write()
+
+
+affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/20160906131917_LVOT_SSFP_CINE_25.nii"
+mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_Segmentation.nii"
+output_dir = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk"
+LVOT_vtk_conversion = LvotSeg2vtk(affine, mask, output_dir)
+print("LVOT segmentation converted to vtk")
 
 
 #%% 
@@ -548,96 +528,6 @@ import numpy as np
 #     ]
 #     return scaling_factors
 
-# def vtk2Dslicer(model_path, output_path, A):
-#     """
-#     model_path (str): Input file for the existing 3D model.
-#     output_path (str): Output folder for generated .vtk files.
-#     A (int): Number of timesteps in the model
-#     """
-#     os.makedirs(output_path, exist_ok=True)
-
-#     for i in range(A):
-#         vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk")
-
-#         # Read the 3D model (Unstructured Grid)
-#         reader3D = vtk.vtkUnstructuredGridReader()
-#         reader3D.SetFileName(vtk_path_model)
-#         reader3D.Update()
-
-#         # Convert to PolyData for slicing
-#         geometryFilter = vtk.vtkGeometryFilter()
-#         geometryFilter.SetInputData(reader3D.GetOutput())
-#         geometryFilter.Update()
-#         polydata3D = geometryFilter.GetOutput()
-
-#         # Read the 2D MRI slice
-#         vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
-#         reader2D = vtk.vtkPolyDataReader()
-#         reader2D.SetFileName(vtk_path_rota)
-#         reader2D.Update()
-#         polydata2D = reader2D.GetOutput()
-
-#         # Get the bounding boxes
-#         bounds3D = polydata3D.GetBounds()
-#         bounds2D = polydata2D.GetBounds()
-
-#         # Calculate scaling factors
-#         scaling_factors = calculate_scaling_factors(bounds3D, bounds2D)
-
-#         # Apply scaling to the 3D model
-#         transform = vtk.vtkTransform()
-#         transform.Scale(scaling_factors)
-
-#         transformFilter = vtk.vtkTransformPolyDataFilter()
-#         transformFilter.SetInputData(polydata3D)
-#         transformFilter.SetTransform(transform)
-#         transformFilter.Update()
-
-#         scaledPolyData3D = transformFilter.GetOutput()
-
-#         # Calculate the average plane and its normal from the 2D MRI slice
-#         points = polydata2D.GetPoints()
-#         n_points = points.GetNumberOfPoints()
-
-#         # Convert to numpy for easier calculation
-#         pts = np.array([points.GetPoint(j) for j in range(n_points)])
-#         center = np.mean(pts, axis=0)
-
-#         # Estimate the normal via PCA (Principal Component Analysis)
-#         _, _, vh = np.linalg.svd(pts - center)
-#         normal = vh[2]  # The 3rd component (smallest variance) corresponds to the normal
-
-#         # Define the cutting plane in VTK
-#         cutPlane = vtk.vtkPlane()
-#         cutPlane.SetOrigin(center)
-#         cutPlane.SetNormal(normal)
-
-#         # Apply the cut to the scaled 3D model
-#         cutter = vtk.vtkCutter()
-#         cutter.SetCutFunction(cutPlane)
-#         cutter.SetInputData(scaledPolyData3D)
-#         cutter.Update()
-#         cutPolyData = cutter.GetOutput()
-
-#         # Save the slice as a VTK file
-#         vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
-#         writer = vtk.vtkPolyDataWriter()
-#         writer.SetFileName(vtk_path_slice)
-#         writer.SetInputData(cutPolyData)
-#         writer.SetFileTypeToASCII()
-#         writer.Write()
-
-#     print("vtk2Dslicer - execution completed")
-
-# # Test
-# path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
-# output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
-# step = 40
-# vtk2Dslicer(path_3D, output_path, step)
-# print("Model sliced")
-
-
-
 # Old version without rescaling
 def vtk2Dslicer (model_path, output_path, A):
     """
@@ -650,7 +540,7 @@ def vtk2Dslicer (model_path, output_path, A):
 
     for i in range(A):   ##range value is equal to the number of time step, 40 in our case
         ### Need improvement##################################################
-        vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V2_PostSim.t{i:02d}.vtk") ### Need improvement##################################################
+        vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V3_PreSim.t{i:02d}.vtk") ### Need improvement##################################################
         # print("reading : ", vtk_path_model)
 
         # Lire le maillage 3D (Unstructured Grid)
@@ -710,8 +600,8 @@ def vtk2Dslicer (model_path, output_path, A):
 
 
 # # test
-path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/"
-output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
+path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs"
+output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk/"
 step = 40
 vtk2Dslicer(path_3D, output_path, step)
 print("Model sliced")
@@ -807,193 +697,3 @@ distances = calculate_distances(tab_2DMRI, tab_3Dslice)
 for i, distance in enumerate(distances):
     print(f"Distance at timestep {i}: {distance}")
 
-
-# %% ################################################
-
-def reorder_points(points):
-    """
-    This function is required because the slice generated link points by their z-value, thus creating a non-continuous path.
-
-    The funtion reorders a list of 3D points to form a continuous path.
-    This method follows a nearest neighbour algorithm:
-    it starts from the first point and at each step adds the nearest point
-    of those not yet used.
-    
-    Args:
-        points (np.ndarray): array of shapes (N, 3), representing 3D points.
-    """
-
-    # Copy to avoid modifying the original data
-    points = points.copy()
-
-    # List for storing reordered points
-    ordered = [points[0]]  # We start with the first point of the original list
-
-    # Boolean table to see which points have already been used
-    used = np.zeros(len(points), dtype=bool)
-    used[0] = True  # the first point is already in use
-
-    # Repeat until all points have been used
-    for _ in range(1, len(points)):
-        last_point = ordered[-1]  # last point added
-        # Calculate the distance between the current point and the others
-        dists = np.linalg.norm(points - last_point, axis=1)
-        dists[used] = np.inf  # Skipping pint that are already used
-        # Find the nearest unused point
-        next_index = np.argmin(dists)
-        # Add this point to the ordered list
-        ordered.append(points[next_index])
-        used[next_index] = True  
-
-    return np.array(ordered)
-
-
-#%%
-def recentrer_points(file_vtk):
-    """
-    file_vtk (str) : Input file for the existing 3D model.
-    """
-    centre = shape_center(file_vtk)
-    points_centres = []
-    points=read_points_vtk(file_vtk)
-    for i in range(points.GetNumberOfPoints()):
-        point = points.GetPoint(i)
-        point_centre = [point[0] - centre[0], point[1] - centre[1], point[2] - centre[2]]
-        points_centres.append(point_centre)
-    return np.array(points_centres)
-
-## Test
-# input_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Python_vtk_Slices/2DstacksMRI_29_test_2DSlicerV2/rotated_29_2.vtk"
-# matrice = recentrer_points(input_path)
-# print(matrice)
-
-
-
-
-#%%
-######################################
-####### Tentative optimisation #######
-######################################
-
-def kabsch_align(points_A, points_B):
-    """
-    points_A: np.ndarray of shape (N, 3) - reference point cloud
-    points_B: np.ndarray of shape (N, 3) - point cloud to align
-    """
-    # Center both point clouds around their centroids
-    A = points_A - points_A.mean(axis=0)
-    B = points_B - points_B.mean(axis=0)
-
-    # Compute covariance matrix
-    H = B.T @ A
-
-    # Singular Value Decomposition (SVD)
-    U, S, Vt = np.linalg.svd(H)
-
-    # Compute the optimal rotation matrix
-    R = Vt.T @ U.T
-
-    # Reflection correction (ensure proper rotation with determinant +1)
-    if np.linalg.det(R) < 0:
-        Vt[-1, :] *= -1
-        R = Vt.T @ U.T
-    # Rotate B and re-add A's centroid to complete alignment
-    B_aligned = (B @ R) + points_A.mean(axis=0)
-
-    # Optionally reorder points (Ensure a continuous curve)
-    # B_aligned=reorder_points(B_aligned) ################################################## test
-    return B_aligned
-
-
-def project_to_plane(points, normal, point_on_plane):
-    """
-    Projects 3D points onto a plane defined by a normal vector and a point on the plane.
-    """
-    normal = normal / np.linalg.norm(normal)
-    vectors = points - point_on_plane
-    distances = np.dot(vectors, normal)
-    return points - np.outer(distances, normal)
-
-
-
-##Test~~~~~
-
-input_path_A = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/rotated_4.vtk"
-matrice_A = recentrer_points(input_path_A)
-matrice_A = reorder_points(matrice_A)
-input_path_B = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/transverse_slice_004.vtk"
-matrice_B = recentrer_points(input_path_B)
-matrice_B = reorder_points(matrice_B)
-
-# Interpolate the matrix
-new_number_points = min(matrice_A.shape[0], matrice_B.shape[0])
-matrice_A_interpolee = interpolate_along_curve(matrice_A, new_number_points)
-matrice_B_interpolee = interpolate_along_curve(matrice_B, new_number_points)
-
-
-
-############# Optimisation
-
-# Calculate the original residual gap
-gap_init = gap_calculator_array(matrice_A_interpolee, matrice_B_interpolee)
-print("Gap before optimization :", gap_init)
-
-matrice_A_opti = kabsch_align(matrice_B_interpolee, matrice_A_interpolee)
-
-# # Reprojeter dans le plan de A (Ensure the optimised result is in the same plan as matrice_A)
-# plane_normal = np.cross(matrice_A_interpolee[1] - matrice_A_interpolee[0], matrice_A_interpolee[2] - matrice_A_interpolee[0])
-# plane_point = matrice_A_interpolee[0]
-# matrice_B_opti = project_to_plane(matrice_B_opti, plane_normal, plane_point)
-
-# Calculate the final residual gap
-gap_final = gap_calculator_array(matrice_B_interpolee, matrice_A_opti)
-print("Gap after optimization :", gap_final)
-
-
-
-##### Visualization
-
-fig = go.Figure()
-
-# Courbe A (rouge)
-fig.add_trace(go.Scatter3d(
-    x=matrice_A_interpolee[:, 0], y=matrice_A_interpolee[:, 1], z=matrice_A_interpolee[:, 2],
-    mode='lines+markers',
-    name='Interpolation A',
-    line=dict(color='red'),
-    marker=dict(size=3, color='red', opacity=0.5)
-))
-
-# Courbe B (bleu)
-fig.add_trace(go.Scatter3d(
-    x=matrice_B_interpolee[:, 0], y=matrice_B_interpolee[:, 1], z=matrice_B_interpolee[:, 2],
-    mode='lines+markers',
-    name='Interpolation B',
-    line=dict(color='blue', dash='dash'),
-    marker=dict(size=3, color='blue')
-))
-
-# # Courbe B optimisée (vert)
-# fig.add_trace(go.Scatter3d(
-#     x=matrice_A_opti[:, 0], y=matrice_A_opti[:, 1], z=matrice_A_opti[:, 2],
-#     mode='lines+markers',
-#     name='Optimised A',
-#     line=dict(color='green', dash='dash'),
-#     marker=dict(size=3, color='green')
-# ))
-
-# Mise en page
-fig.update_layout(
-    title='Interpolation along the 3D contour',
-    scene=dict(
-        xaxis_title='X-Axis',
-        yaxis_title='Y-Axis',
-        zaxis_title='Z-Axis'
-    ),
-    legend=dict(x=0, y=1.5),
-    margin=dict(l=0, r=0, b=0, t=30),
-    height=600
-)
-
-fig.show()
-# %%
