@@ -242,6 +242,11 @@ def extract_nodeset_data(feb_file_path, node_sets):
 
     return bc_data
 
+# Rotation matrix
+def calc_rota_matrix(primary_coord_system, second_coord_system):
+    R= np.dot(second_coord_system, primary_coord_system.T)
+    return(R)
+
 
 input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim.feb"
 node_of_interest=find_presc_disp_node(input_file_path)
@@ -250,15 +255,16 @@ node_coordinates = extract_node_coordinates(input_file_path)
 print("Coordinates :")
 print(node_of_interest)
 print("Finished the search")
-print(nodes_data[0])
+print(nodes_data[0][3])
 print("Finished extracting node`s data")
-# print(node_coordinates)
-# # print(node_coordinates)
-
+original_coord_system = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]]) #We theorise that the feb file coordinate system is the orthonormal direct system
+BC_coord_system = nodes_data[0][3]
+transform_matrix = calc_rota_matrix(BC_coord_system, original_coord_system)
+print(transform_matrix)
 
 
 #%% Useful to modify the values of a specified B.C
-def update_BC_parameters(febio_file, boundary_name, updates):
+def update_BC_parameters(febio_file, boundary_name, updates, output_file_path=None):
     # Load the XML file
     tree = ET.parse(febio_file)
     root = tree.getroot()
@@ -281,15 +287,43 @@ def update_BC_parameters(febio_file, boundary_name, updates):
             if relative_element is not None and 'relative' in updates:
                 relative_element.text = str(updates['relative'])
 
+    # Determine the file path to write the updated XML
+    output_path = output_file_path if output_file_path else febio_file
+
     # Write the updated XML back to the file
-    with open(febio_file, 'w') as f:
+    with open(output_path, 'w') as f:
         f.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
         tree.write(f, encoding='unicode')
 
-
-updates = {'initial_value': 7, 'relative': 0}
+updates = {'initial_value': 0, 'relative': 0}
 file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
 update_BC_parameters(file_path, "PrescribedDisplacement2", updates)
+
+
+#%%
+
+input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim.feb"
+node_of_interest=find_presc_disp_node(input_file_path)
+nodes_data= extract_nodeset_data(input_file_path, node_of_interest)
+node_coordinates = extract_node_coordinates(input_file_path)
+original_coord_system = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]]) #We theorise that the feb file coordinate system is the orthonormal direct system
+BC_coord_system = nodes_data[0][3]
+R = calc_rota_matrix(BC_coord_system, original_coord_system)
+
+file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
+output_dir= "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation" 
+for i in range (0,6):
+    for j in range (0, 6):
+        for k in range (0, 11):
+            coords =np.array([i, j, k])
+            coords_xyz = np.dot(R, coords) 
+            output = os.path.join(output_dir, f"Whole_heart_2016_42_mesh_V3_PreSim_{i}_{j}_{k}.feb")
+            x_bc = {'initial_value': coords_xyz[0]}
+            update_BC_parameters(file_path, "PrescribedDisplacement2", x_bc, output)
+            y_bc = {'initial_value': coords_xyz[1]}
+            update_BC_parameters(output, "PrescribedDisplacement3", y_bc)
+            z_bc = {'initial_value': coords_xyz[2]}
+            update_BC_parameters(output, "PrescribedDisplacement4", z_bc)
 
 
 
@@ -336,9 +370,9 @@ def LvotSeg2vtk(nifti_path, segmentation_path, output_dir):
             writer_raw.Write()
 
 
-affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/20160906131917_LVOT_SSFP_CINE_25.nii"
-mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_Segmentation.nii"
-output_dir = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk"
+affine = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/20160906131917_LVOT_SSFP_CINE_24.nii"
+mask = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_Segmentation_LVOT.nii"
+output_dir = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_vtk"
 LVOT_vtk_conversion = LvotSeg2vtk(affine, mask, output_dir)
 print("LVOT segmentation converted to vtk")
 
@@ -386,6 +420,7 @@ def interpolate_along_curve(points, target_point_number):
     return ordered_interpolated_points
 
 #%% Other Strategy to extract the contour of a segmentation using the Gradient methodology. Main issue = Point are ordered based on their z coordinate (noncontinuous curve) + rougher shape
+#Don`t use for LVOT seg where we omly export key points and a plain shape  
 def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
     """
     nifti_path (str): Path to the original NIfTI file (to extract the affine matrix).
@@ -507,40 +542,82 @@ def rotate_vtk(nifti_path, grad_path, output_path, A):
         writer.SetInputData(out)
         writer.Write()
 
+# # Test
+# nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29.nii"
+# grad_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
+# output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
+# new_vtk = rotate_vtk(nifti_file, grad_path, output_path, 40)
+# print("vtk rotation done")
+
+
+def rotateLVOT(nifti_path, grad_path, output_path, A, B):
+    """
+    nifti_path (str): Path to the original NIfTI file (to extract the affine matrix).
+    grad_path (str): Folder for existing contour_{}.vtk files.
+    output_path (str): Output folder for generated .vtk files.
+    A (int): Number of timesteps in the model 
+    """
+    
+    os.makedirs(output_path, exist_ok=True)
+
+    # Load affine matrix from NIfTI file
+    nifti_img = nib.load(nifti_path)
+    affine = nifti_img.affine
+    affine_list = affine.reshape(16).tolist()
+    tr = vtk.vtkTransform()
+    tr.SetMatrix(affine_list)
+
+    for i in range(A):   ##range value is equal to the number of time step, A in our case
+        for j in range(1, B+1):   ##range value is equal to the number associated with the key point
+            reader = vtk.vtkPolyDataReader()
+            writer = vtk.vtkPolyDataWriter()
+
+            vtk_path_grad = os.path.join(grad_path, f"surface_{j}_time_{i}.vtk")
+            reader.SetFileName(vtk_path_grad)
+            reader.Update()
+            pd = reader.GetOutput()
+
+            # Create a VTK affine transform
+            out = transformPolyData(pd,tr)
+
+            vtk_path_rota = os.path.join(output_path, f"rotated_surface_{j}_time_{i:02d}.vtk")
+            writer.SetFileName(vtk_path_rota)
+            writer.SetInputData(out)
+            writer.Write()
+
+
 # Test
-nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/20160906131917_AO_SINUS_STACK_CINES_29.nii"
-grad_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
-output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk/"
-new_vtk = rotate_vtk(nifti_file, grad_path, output_path, 40)
+nifti_file = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/20160906131917_LVOT_SSFP_CINE_24.nii"
+grad_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_vtk"
+output_path = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_vtk"
+new_vtk = rotateLVOT(nifti_file, grad_path, output_path, 40, 7)
 print("vtk rotation done")
+
+
 
 #%%
 import os
 import vtk
 import numpy as np
 
-# def calculate_scaling_factors(bounds3D, bounds2D):
-#     # Calculate the scaling factors for each dimension
-#     scaling_factors = [
-#         (bounds2D[1] - bounds2D[0]) / (bounds3D[1] - bounds3D[0]),
-#         (bounds2D[3] - bounds2D[2]) / (bounds3D[3] - bounds3D[2]),
-#         (bounds2D[5] - bounds2D[4]) / (bounds3D[5] - bounds3D[4])
-#     ]
-#     return scaling_factors
 
-# Old version without rescaling
-def vtk2Dslicer (model_path, output_path, A):
+
+
+def vtk2Dslicer (model_path, output_path, model3D_name_pattern, seg_name_pattern, A):
     """
     model_path (str): Input file for the existing 3D model.
     output_path (str): Output folder for generated .vtk files.
     A (int): Number of timesteps in the model
+    model3D_name_pattern (str): Pattern for the 3D model filenames, using {i} for the timestep.
+    seg_name_pattern (str): Pattern for the rotated segmentation filenames, using {i} for the timestep.
     """
     os.makedirs(output_path, exist_ok=True)
 
 
     for i in range(A):   ##range value is equal to the number of time step, 40 in our case
         ### Need improvement##################################################
-        vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V3_PreSim.t{i:02d}.vtk") ### Need improvement##################################################
+        # vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V3_PreSim.t{i:02d}.vtk") ### Need improvement##################################################
+        vtk_path_model = os.path.join(model_path, model3D_name_pattern.format(i=i))
         # print("reading : ", vtk_path_model)
 
         # Lire le maillage 3D (Unstructured Grid)
@@ -555,7 +632,8 @@ def vtk2Dslicer (model_path, output_path, A):
         polydata3D = geometryFilter.GetOutput()
 
         #Reading the 2D MRI ##### Boucle for i in range(timestep) a implementer
-        vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
+        # vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
+        vtk_path_rota = os.path.join(output_path, seg_name_pattern.format(i=i))
         reader2D = vtk.vtkPolyDataReader()
         reader2D.SetFileName(vtk_path_rota)
         reader2D.Update()
@@ -600,13 +678,73 @@ def vtk2Dslicer (model_path, output_path, A):
 
 
 # # test
+output_dir = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_vtk"
+
 path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs"
-output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk/"
+# output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk/"
+file3D_pattern = "Whole_heart_2016_42_mesh_V3_PreSim.t{i:02d}.vtk"
+seg_pattern = "rotated_surface_2_time_{i:02d}.vtk"
 step = 40
-vtk2Dslicer(path_3D, output_path, step)
+vtk2Dslicer(path_3D, output_dir, file3D_pattern, seg_pattern, step)
 print("Model sliced")
 
 
+#%% Associating key points from the MRI 2D segmentation to the 3D model
+
+def find_closest_points(aorta_points, segment_points):
+    centroid = np.mean(segment_points, axis=0)
+    distances = np.linalg.norm(aorta_points - centroid, axis=1)
+    closest_point_index = np.argmin(distances)
+    return (aorta_points[closest_point_index], closest_point_index)
+
+
+def write_vtk_points(file_path, points):
+    points_vtk = vtk.vtkPoints()
+    for point in points:
+        points_vtk.InsertNextPoint(point)
+
+    polydata = vtk.vtkPolyData()
+    polydata.SetPoints(points_vtk)
+
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(file_path)
+    writer.SetInputData(polydata)
+    writer.Write()
+
+# Use case
+aorta_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/transverse_slice_{i:03d}.vtk"
+segment_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/rotated_surface_{j}_time_00.vtk"
+output_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/closest_points_{j:02d}_pts_{i:02d}.vtk"
+
+closest_indices = {}
+
+
+for j in range(1, 8):
+    aorta_file = aorta_file_pattern.format(i=0)
+    segment_file = segment_file_pattern.format(j=j)
+
+    aorta_points = read_points_vtk(aorta_file)
+    aorta_pts_array = np.array([aorta_points.GetPoint(i) for i in range(aorta_points.GetNumberOfPoints())])
+    segment_points = read_points_vtk(segment_file)
+    segment_pts_array = np.array([segment_points.GetPoint(i) for i in range(segment_points.GetNumberOfPoints())])
+
+
+    # Trouver le point le plus proche pour le premier timestep
+    closest_point, closest_index = find_closest_points(aorta_pts_array, segment_pts_array)
+    closest_indices[j] = closest_index
+
+    # Écrire le point le plus proche pour le premier timestep
+    output_file = output_file_pattern.format(j=j, i=0)
+    write_vtk_points(output_file, [closest_point])
+
+    # Extraire et écrire les points pour les timesteps suivants
+    for i in range(1, 40):
+        aorta_file = aorta_file_pattern.format(i=i)
+        aorta_points = read_points_vtk(aorta_file)
+        aorta_pts_array = np.array([aorta_points.GetPoint(closest_index)])
+
+        output_file = output_file_pattern.format(j=j, i=i)
+        write_vtk_points(output_file, aorta_pts_array)
 
 # %% Useful to obtain the coordinate of the center of a 2D shape
 def shape_center(vtk_file):
