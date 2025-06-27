@@ -691,9 +691,8 @@ print("Model sliced")
 
 #%% Associating key points from the MRI 2D segmentation to the 3D model
 
-def find_closest_points(aorta_points, segment_points):
-    centroid = np.mean(segment_points, axis=0)
-    distances = np.linalg.norm(aorta_points - centroid, axis=1)
+def find_closest_point(aorta_points, second_point):
+    distances = np.linalg.norm(aorta_points - second_point, axis=1)
     closest_point_index = np.argmin(distances)
     return (aorta_points[closest_point_index], closest_point_index)
 
@@ -716,35 +715,55 @@ aorta_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentati
 segment_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/rotated_surface_{j}_time_00.vtk"
 output_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/closest_points_{j:02d}_pts_{i:02d}.vtk"
 
-closest_indices = {}
+# Initialisation des listes pour stocker les distances
+height = []
+distances_bottom = []
+distances_mid = []
+distances_top = []
 
+# Dictionnaire pour stocker les points de chaque surface à chaque timestep
+surface_points = {j: [] for j in range(1, 8)}
 
-for j in range(1, 8):
-    aorta_file = aorta_file_pattern.format(i=0)
-    segment_file = segment_file_pattern.format(j=j)
-
-    aorta_points = read_points_vtk(aorta_file)
-    aorta_pts_array = np.array([aorta_points.GetPoint(i) for i in range(aorta_points.GetNumberOfPoints())])
-    segment_points = read_points_vtk(segment_file)
-    segment_pts_array = np.array([segment_points.GetPoint(i) for i in range(segment_points.GetNumberOfPoints())])
-
-
-    # Trouver le point le plus proche pour le premier timestep
-    closest_point, closest_index = find_closest_points(aorta_pts_array, segment_pts_array)
-    closest_indices[j] = closest_index
-
-    # Écrire le point le plus proche pour le premier timestep
-    output_file = output_file_pattern.format(j=j, i=0)
-    write_vtk_points(output_file, [closest_point])
-
-    # Extraire et écrire les points pour les timesteps suivants
-    for i in range(1, 40):
+for i in range(40):
+    for j in range(1, 8):
         aorta_file = aorta_file_pattern.format(i=i)
-        aorta_points = read_points_vtk(aorta_file)
-        aorta_pts_array = np.array([aorta_points.GetPoint(closest_index)])
+        segment_file = segment_file_pattern.format(j=j)
 
+        aorta_points = read_points_vtk(aorta_file)
+        aorta_pts_array = np.array([aorta_points.GetPoint(k) for k in range(aorta_points.GetNumberOfPoints())])
+        segment_points = read_points_vtk(segment_file)
+        segment_pts_array = np.array([segment_points.GetPoint(k) for k in range(segment_points.GetNumberOfPoints())])
+
+        if i == 0:
+            # Trouver le point le plus proche pour le premier timestep
+            closest_point, closest_index = find_closest_point(aorta_pts_array, np.mean(segment_pts_array, axis=0))
+        else:
+            # Trouver le point le plus proche du point précédent
+            closest_point, closest_index = find_closest_point(aorta_pts_array, surface_points[j][-1])
+
+        # Stocker le point pour la surface actuelle et le timestep actuel
+        surface_points[j].append(closest_point)
+
+        # Écrire le point le plus proche
         output_file = output_file_pattern.format(j=j, i=i)
-        write_vtk_points(output_file, aorta_pts_array)
+        write_vtk_points(output_file, [closest_point])
+
+    # Calculer et stocker les distances entre les paires de points spécifiées pour le timestep actuel
+    if i < len(surface_points[1]):  # Assurez-vous que les points existent pour ce timestep
+        height.append(np.linalg.norm(surface_points[1][i] - surface_points[2][i]))
+        distances_bottom.append(np.linalg.norm(surface_points[2][i] - surface_points[3][i]))
+        distances_mid.append(np.linalg.norm(surface_points[4][i] - surface_points[5][i]))
+        distances_top.append(np.linalg.norm(surface_points[6][i] - surface_points[7][i]))
+
+
+
+
+# Affichage des distances calculées
+print("Distances entre les points 1 et 2 :", height)
+print("Distances entre les points 2 et 3 :", distances_bottom)
+print("Distances entre les points 4 et 5 :", distances_mid)
+print("Distances entre les points 6 et 7 :", distances_top)
+
 
 # %% Useful to obtain the coordinate of the center of a 2D shape
 def shape_center(vtk_file):
