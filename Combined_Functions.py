@@ -85,47 +85,7 @@ def generate_load_curve(file_path, func, start=0, end=40, step=1):
             f.write(f"{x} {y}\n")
 
 
-#%%
-# Python tool  aiming to modify the boundaries of the febio model
-def modify_feb_file(input_file_path, output_file_path, new_boundary_conditions):
-    """
-    Args:
-    input_file path (str): Path to original febio file (.feb)
-    output_file_path (str): Path where the new .feb file with updated boundaries will be saved
-    new_boundary_conditions (str): Listing of the new boundaries. Written to be compatible with febio
-    """
-    with open(input_file_path, 'r') as file:
-        lines = file.readlines()
 
-    with open(output_file_path, 'w') as file:
-        in_boundary_condition_section = False
-
-        for line in lines:
-            if line.strip() == "<BoundaryCondition>" or line.strip() == "<Boundary>":
-                in_boundary_condition_section = True
-                file.write(line)
-                # Write new boundary conditions
-                for condition in new_boundary_conditions:
-                    file.write(f'    <fix id="{condition["id"]}">{condition["values"]}</fix>\n')
-            elif line.strip() == "</BoundaryCondition>" or line.strip() == "</Boundary>":
-                in_boundary_condition_section = False
-                file.write(line)
-            elif not in_boundary_condition_section:
-                file.write(line)
-
-# Example
-input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim.feb"
-output_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim _modified_BC_CrashTesting.feb"
-new_boundary_conditions =  [
-    {"content": '<bc name="ZeroDisplacement1" node_set="@edge:ZeroDisplacement1" type="zero displacement"><x_dof>1</x_dof><y_dof>1</y_dof><z_dof>1</z_dof></bc>'},
-    {"content": '<bc name="PrescribedDisplacement2" node_set="@edge:PrescribedDisplacement2" type="prescribed displacement"><dof>x</dof><value lc="3">1</value><relative>0</relative></bc>'},
-    {"content": '<bc name="PrescribedDisplacement3" node_set="@edge:PrescribedDisplacement3" type="prescribed displacement"><dof>y</dof><value lc="3">0</value><relative>0</relative></bc>'},
-    {"content": '<bc name="PrescribedDisplacement4" node_set="@edge:PrescribedDisplacement4" type="prescribed displacement"><dof>z</dof><value lc="3">0</value><relative>0</relative></bc>'}
-]
-    # Add other boundary conditions if necessary
-
-modify_feb_file(input_file_path, output_file_path, new_boundary_conditions)
-print("modification done")
 
 
 #%% Calculate the normal vector and acquire data on the BC
@@ -299,8 +259,34 @@ updates = {'initial_value': 0, 'relative': 0}
 file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
 update_BC_parameters(file_path, "PrescribedDisplacement2", updates)
 
+#%%#%% Useful to modify the type of output file
+def update_output(febio_file, updates, output_file_path=None):
+    # Load the XML file
+    tree = ET.parse(febio_file)
+    root = tree.getroot()
 
-#%%
+    # Iterate through all boundary conditions
+    for plotfile in root.iter('plotfile'):
+        plotfile.set('type', str(updates['new_type']))
+
+
+    # Determine the file path to write the updated XML
+    output_path = output_file_path if output_file_path else febio_file
+
+    # Write the updated XML back to the file
+    with open(output_path, 'w') as f:
+        f.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
+        tree.write(f, encoding='unicode')
+
+updates = {'new_type': 'vtk'}
+input_dir = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
+for i in range (0,6):
+    for j in range (0, 6):
+        for k in range (0, 11):
+            file_path = os.path.join(input_dir, f"Whole_heart_2016_42_mesh_V3_PreSim_{i}_{j}_{k}.feb")
+            update_output(file_path, updates)
+
+#%% Script to test Update_BC_parameters
 
 input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim.feb"
 node_of_interest=find_presc_disp_node(input_file_path)
@@ -601,7 +587,7 @@ import numpy as np
 
 
 
-def vtk2Dslicer (model_path, output_path, model3D_name_pattern, seg_name_pattern, A):
+def vtk2Dslicer (model_path, input_seg_path, output_path, model3D_name_pattern, seg_name_pattern, output_pattern, A):
     """
     model_path (str): Input file for the existing 3D model.
     output_path (str): Output folder for generated .vtk files.
@@ -612,26 +598,31 @@ def vtk2Dslicer (model_path, output_path, model3D_name_pattern, seg_name_pattern
     os.makedirs(output_path, exist_ok=True)
 
 
-    for i in range(A):   ##range value is equal to the number of time step, 40 in our case
-        ### Need improvement##################################################
-        # vtk_path_model = os.path.join(model_path, f"Whole_heart_2016_42_mesh_V3_PreSim.t{i:02d}.vtk") ### Need improvement##################################################
-        vtk_path_model = os.path.join(model_path, model3D_name_pattern.format(i=i))
-        # print("reading : ", vtk_path_model)
+    for t in range(A):   ##range value is equal to the number of time step, 40 in our case
+        vtk_path_model = os.path.join(model_path, model3D_name_pattern.format(t=t))
+        print(f"Reading model: {vtk_path_model}")  # Debug print
+        if not os.path.exists(vtk_path_model):
+            print(f"File not found: {vtk_path_model}")
+            continue
 
-        # Lire le maillage 3D (Unstructured Grid)
+        # Reading the 3D mesh (Unstructured Grid)
         reader3D = vtk.vtkUnstructuredGridReader()
         reader3D.SetFileName(vtk_path_model)
         reader3D.Update()
 
-        # Si vous avez besoin d’un PolyData pour la coupe :
+
         geometryFilter = vtk.vtkGeometryFilter()
         geometryFilter.SetInputData(reader3D.GetOutput())
         geometryFilter.Update()
         polydata3D = geometryFilter.GetOutput()
 
         #Reading the 2D MRI ##### Boucle for i in range(timestep) a implementer
-        # vtk_path_rota = os.path.join(output_path, f"rotated_{i}.vtk")
-        vtk_path_rota = os.path.join(output_path, seg_name_pattern.format(i=i))
+        vtk_path_rota = os.path.join(input_seg_path, seg_name_pattern.format(t=t))
+        # print(f"Reading segmentation: {vtk_path_rota}")  # Debug print
+        #     if not os.path.exists(vtk_path_rota):
+        #         print(f"File not found: {vtk_path_rota}")
+        #         continue
+
         reader2D = vtk.vtkPolyDataReader()
         reader2D.SetFileName(vtk_path_rota)
         reader2D.Update()
@@ -666,25 +657,27 @@ def vtk2Dslicer (model_path, output_path, model3D_name_pattern, seg_name_pattern
         # print("Type de données sauvegardées :", cutPolyData.GetClassName())
 
         #Sauvegarde en vtk
-        vtk_path_slice = os.path.join(output_path, f"transverse_slice_{i:03d}.vtk")
+        vtk_path_slice = os.path.join(output_path, output_pattern.format(t=t))
         writer = vtk.vtkPolyDataWriter()
         writer.SetFileName(vtk_path_slice)
         writer.SetInputData(cutPolyData)
         writer.SetFileTypeToASCII()
         writer.Write()
     print("vtk2Dslicer - execution completed")
+# except Exception as e:
+#         print(f"An error occurred: {e}")
 
 
-# # test
-output_dir = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_vtk"
-
-path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs"
-# output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk/"
-file3D_pattern = "Whole_heart_2016_42_mesh_V3_PreSim.t{i:02d}.vtk"
-seg_pattern = "rotated_surface_2_time_{i:02d}.vtk"
-step = 40
-vtk2Dslicer(path_3D, output_dir, file3D_pattern, seg_pattern, step)
-print("Model sliced")
+# # # test
+# output_dir = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk"
+# input_seg = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk"
+# path_3D = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs"
+# # output_path="C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk/"
+# file3D_pattern = "Whole_heart_2016_42_mesh_V3_PreSim.t{i:02d}.vtk"
+# seg_pattern = "rotated_{i}.vtk"
+# step = 40
+# vtk2Dslicer(path_3D, input_seg, output_dir, file3D_pattern, seg_pattern, step)
+# print("Model sliced")
 
 
 #%% Associating key points from the MRI 2D segmentation to the 3D model
@@ -763,6 +756,41 @@ print("Distances entre les points 4 et 5 :", distances_mid)
 print("Distances entre les points 6 et 7 :", distances_top)
 
 
+#%%
+import vtk
+import numpy as np
+
+def extract_endpoints(filename):
+    reader = vtk.vtkUnstructuredGridReader()
+    reader.SetFileName(filename)
+    reader.Update()
+
+    # get data and lines
+    data = reader.GetOutput()
+    lines = data.GetLines()
+
+    # Initialise the liste
+    endpoints = []
+
+    # finding extremities
+    lines.InitTraversal()
+    idList = vtk.vtkIdList()
+    while lines.GetNextCell(idList):
+        if idList.GetNumberOfIds() > 0:
+            # adding first and last point to the line
+            endpoints.append(idList.GetId(0))
+            endpoints.append(idList.GetId(idList.GetNumberOfIds() - 1))
+
+    # Extract coordinates
+    points = data.GetPoints()
+    endpoint_coordinates = [points.GetPoint(i) for i in endpoints]
+
+    return endpoint_coordinates
+
+# Use case
+filename = 'votre_fichier.vtk'
+endpoints = extract_endpoints(filename)
+print("Points des extrémités :", endpoints)
 # %% Useful to obtain the coordinate of the center of a 2D shape
 def shape_center(vtk_file):
     """
@@ -853,54 +881,126 @@ for i, distance in enumerate(distances):
     print(f"Distance at timestep {i}: {distance}")
 
 
-# %%
-
-import os
+#%% Simulation runner
 import subprocess
+import os
 
-def convert_xplt_to_vtk(febio_exe_path, xplt_file, output_dir, num_timesteps):
+##set the folder where you stock the .feb file as base path
+basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
+
+#adjust the ranges to coorespond with the simu
+for i in range(0,11):
+    for j in range(6):
+        for k in range(6):
+            #Specify input and output
+            feb_path = os.path.join(basepath, f"Whole_heart_2016_42_mesh_V3_PreSim_{k}_{j}_{i}.feb")
+            vtk_path = os.path.join(basepath, "jobs", f"Output_WH_{k}_{j}_{i}.vtk")
+
+            # write the command line and run it
+            cmd = ["febio4", "run", "-i", feb_path, "-p", vtk_path]
+            print("Running:", " ".join(cmd))
+            result = subprocess.run(cmd, capture_output=True, text=True)
+
+            #error case
+            if result.returncode != 0:
+                print(f"Error at index {i}:\n{result.stderr}")
+            else:
+                print(result.stdout)
+
+#%% function version of the script above
+import subprocess
+import os
+
+
+def run_simulation(basepath, i_range, j_range, k_range, feb_path_func, vtk_path_func):
     """
-    Convertit un fichier .xplt en plusieurs .vtk, un par timestep.
-    
-    Args:
-        febio_exe_path (str): Chemin vers l'exécutable de FEBio Studio (CLI).
-        xplt_file (str): Chemin vers le fichier .xplt.
-        output_dir (str): Dossier de sortie pour les fichiers .vtk.
-        num_timesteps (int): Nombre de time steps à exporter.
+    Run a simulation using febio4 based on the specified ranges for i, j, and k.
+
+    Parameters:
+    - basepath (str): The base directory where the .feb files are stored.
+    - i_range (tuple): A tuple representing the range for i (start, end).
+    - j_range (tuple): A tuple representing the range for j (start, end).
+    - k_range (tuple): A tuple representing the range for k (start, end).
+    - feb_path_func (function): A function that generates feb_path based on i, j, k.
+    - vtk_path_func (function): A function that generates vtk_path based on i, j, k.
+
+    Returns:
+    - None
     """
-    os.makedirs(output_dir, exist_ok=True)
+    for i in range(*i_range):
+        for j in range(*j_range):
+            for k in range(*k_range):
+                # Generate paths using the provided functions
+                feb_path = feb_path_func(basepath, i, j, k)
+                vtk_path = vtk_path_func(basepath, i, j, k)
 
-    for t in range(num_timesteps):
-        output_file = os.path.join(output_dir, f"frame_{t:03d}.vtk")
+                # Write the command line and run it
+                cmd = ["febio4", "run", "-i", feb_path, "-p", vtk_path]
+                print("Running:", " ".join(cmd))
 
-        command = [
-            febio_exe_path,
-            "--export", f"{xplt_file}",
-            "--timestep", str(t),
-            "--output", output_file
-        ]
-        print(f"Exporting timestep {t} to {output_file}")
-        subprocess.run(command, check=True)
+                result = subprocess.run(cmd, capture_output=True, text=True)
 
-    print("Conversion terminée.")
+                # Error handling
+                if result.returncode != 0:
+                    print(f"Error at index {i}_{j}_{k}:\n{result.stderr}")
+                else:
+                    print(result.stdout)
 
+# functions to generate paths (change the name of the files accordingly)
+def generate_feb_path(basepath, i, j, k):
+    return os.path.join(basepath, f"Whole_heart_2016_42_mesh_V3_PreSim_{k}_{j}_{i}.feb")
 
+def generate_vtk_path(basepath, i, j, k):
+    return os.path.join(basepath, "jobs", f"Output_WH_{k}_{j}_{i}.vtk")
 
-
-# Exemple d'utilisation
-febio_cli_path = r"C:/Program Files/FEBioStudio/bin/febio4.exe"  # À adapter selon ton installation
-xplt_path = "C:/Users/jr403s/Documents/Model_V2_1/Test_converter/Whole_heart_2016_42_mesh_V3_PreSim_0_0_0.xplt"
-vtk_path = "C:/Users/jr403s/Documents/Model_V2_1/Test_converter/Whole_heart_2016_42_mesh_V3_PreSim_0_0_0.vtk"
-n_steps = 40
-convert_xplt_to_vtk(febio_cli_path, xplt_path, vtk_path, n_steps)
+# Example usage:
+basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
+run_simulation(basepath, (0, 11), (0, 6), (0, 6), generate_feb_path, generate_vtk_path)
 
 
-#%%
-# Use case
-aorta_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/transverse_slice_{i:03d}.vtk"
-segment_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/rotated_surface_{j}_time_00.vtk"
-output_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/closest_points_{j:02d}_pts_{i:02d}.vtk"
-for i in range(0, 6):
-    for j in range(0, 6):
-        for k in range(0, 11):
-            path_model3D="C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Whole_heart_2016_42_mesh_V3_PreSim_{i}_{j}_{k}.feb"
+
+#%% Extracting result
+import os
+#set the folder where you stock the .vtk file as base path
+basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs"
+
+for i in range(0,11):
+    for j in range(6):
+        for k in range(6):
+            # Applying the slicer
+            path_3D = basepath
+            output_dir1 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_29"
+            input_seg1 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk"
+            file3D_pattern = f"Output_WH_{k}_{j}_{i}.{{t}}.vtk"
+            seg_pattern = "rotated_{t}.vtk"
+            output_pattern = f"transverse_slice_{k}_{j}_{i}.{{t:02d}}.vtk"
+            step = 40
+            vtk2Dslicer(path_3D, input_seg1, output_dir1, file3D_pattern, seg_pattern, output_pattern, step)
+            input_seg2 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_30/AO_SINUS_STACK_CINES_30_vtk"
+            output_dir2 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_30"
+            vtk2Dslicer(path_3D, input_seg2, output_dir2, file3D_pattern, seg_pattern, output_pattern, step)
+            input_seg3 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_31/AO_SINUS_STACK_CINES_31_vtk"
+            output_dir3 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_31"
+            vtk2Dslicer(path_3D, input_seg3, output_dir3, file3D_pattern, seg_pattern, output_pattern, step)
+            input_seg4 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_32/AO_SINUS_STACK_CINES_32_vtk"
+            output_dir4 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_32"
+            vtk2Dslicer(path_3D, input_seg4, output_dir4, file3D_pattern, seg_pattern, output_pattern, step)
+            input_seg5 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_33/AO_SINUS_STACK_CINES_33_vtk"
+            output_dir5 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_33"
+            vtk2Dslicer(path_3D, input_seg5, output_dir5, file3D_pattern, seg_pattern, output_pattern, step)
+            input_seg6 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk"
+            output_dir6 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_34"
+            vtk2Dslicer(path_3D, input_seg6, output_dir6, file3D_pattern, seg_pattern, output_pattern, step)
+            #LVOT segmentations have a different seg pattern because they include 7 key points (surfaces)
+            input_seg7 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_vtk"
+            output_dir7 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_LVOT_24"
+            seg_pattern_LVOT = "rotated_surface_1_time_{t}.vtk"
+            vtk2Dslicer(path_3D, input_seg7, output_dir7, file3D_pattern, seg_pattern_LVOT, output_pattern, step)
+            input_seg8 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk"
+            output_dir8 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_LVOT_25"
+            vtk2Dslicer(path_3D, input_seg8, output_dir8, file3D_pattern, seg_pattern_LVOT, output_pattern, step)
+
+
+
+
+# %%
