@@ -39,3 +39,44 @@ def convert_xplt_to_vtk(xplt_file_path, vtk_file_path):
 xplt_file = "C:\Users\jr403s\Documents\Model_V2_1\Test_converter\Whole_heart_2016_42_mesh_V3_PreSim_0_0_0.xplt"
 vtk_path = "C:\Users\jr403s\Documents\Model_V2_1\Test_converter\Whole_heart_2016_42_mesh_V3_PreSim_0_0_0.vtk"
 convert_xplt_to_vtk(xplt_file, vtk_path)
+
+# %% test 2 (using febio command line)
+
+import os
+import subprocess
+
+def convert_xplt_to_vtk(febio_exe_path, xplt_file, output_dir, num_timesteps):
+    """
+    Convertit un fichier .xplt en plusieurs .vtk, un par timestep.
+    
+    Args:
+        febio_exe_path (str): Chemin vers l'exécutable de FEBio Studio (CLI).
+        xplt_file (str): Chemin vers le fichier .xplt.
+        output_dir (str): Dossier de sortie pour les fichiers .vtk.
+        num_timesteps (int): Nombre de time steps à exporter.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    for t in range(num_timesteps):
+        output_file = os.path.join(output_dir, f"frame_{t:03d}.vtk")
+
+        command = [
+            febio_exe_path,
+            "--export", f"{xplt_file}",
+            "--timestep", str(t),
+            "--output", output_file
+        ]
+        print(f"Exporting timestep {t} to {output_file}")
+        subprocess.run(command, check=True)
+
+    print("Conversion terminée.")
+
+
+
+
+# Exemple d'utilisation
+febio_cli_path = r"C:/Program Files/FEBioStudio/bin/febio4.exe"  # À adapter selon ton installation
+xplt_path = "C:/Users/jr403s/Documents/Model_V2_1/Test_converter/Whole_heart_2016_42_mesh_V3_PreSim_0_0_0.xplt"
+vtk_path = "C:/Users/jr403s/Documents/Model_V2_1/Test_converter/Whole_heart_2016_42_mesh_V3_PreSim_0_0_0.vtk"
+n_steps = 40
+convert_xplt_to_vtk(febio_cli_path, xplt_path, vtk_path, n_steps)

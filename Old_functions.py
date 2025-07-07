@@ -335,5 +335,46 @@ fig.update_layout(
 )
 
 fig.show()
-# %%
 
+
+#%%
+# Python tool  aiming to modify the boundaries of the febio model
+def modify_feb_file(input_file_path, output_file_path, new_boundary_conditions):
+    """
+    Args:
+    input_file path (str): Path to original febio file (.feb)
+    output_file_path (str): Path where the new .feb file with updated boundaries will be saved
+    new_boundary_conditions (str): Listing of the new boundaries. Written to be compatible with febio
+    """
+    with open(input_file_path, 'r') as file:
+        lines = file.readlines()
+
+    with open(output_file_path, 'w') as file:
+        in_boundary_condition_section = False
+
+        for line in lines:
+            if line.strip() == "<BoundaryCondition>" or line.strip() == "<Boundary>":
+                in_boundary_condition_section = True
+                file.write(line)
+                # Write new boundary conditions
+                for condition in new_boundary_conditions:
+                    file.write(f'    <fix id="{condition["id"]}">{condition["values"]}</fix>\n')
+            elif line.strip() == "</BoundaryCondition>" or line.strip() == "</Boundary>":
+                in_boundary_condition_section = False
+                file.write(line)
+            elif not in_boundary_condition_section:
+                file.write(line)
+
+# Example
+input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim.feb"
+output_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/Whole_heart_2016_42_mesh_V2_PreSim _modified_BC_CrashTesting.feb"
+new_boundary_conditions =  [
+    {"content": '<bc name="ZeroDisplacement1" node_set="@edge:ZeroDisplacement1" type="zero displacement"><x_dof>1</x_dof><y_dof>1</y_dof><z_dof>1</z_dof></bc>'},
+    {"content": '<bc name="PrescribedDisplacement2" node_set="@edge:PrescribedDisplacement2" type="prescribed displacement"><dof>x</dof><value lc="3">1</value><relative>0</relative></bc>'},
+    {"content": '<bc name="PrescribedDisplacement3" node_set="@edge:PrescribedDisplacement3" type="prescribed displacement"><dof>y</dof><value lc="3">0</value><relative>0</relative></bc>'},
+    {"content": '<bc name="PrescribedDisplacement4" node_set="@edge:PrescribedDisplacement4" type="prescribed displacement"><dof>z</dof><value lc="3">0</value><relative>0</relative></bc>'}
+]
+    # Add other boundary conditions if necessary
+
+modify_feb_file(input_file_path, output_file_path, new_boundary_conditions)
+print("modification done")
