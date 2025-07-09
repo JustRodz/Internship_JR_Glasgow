@@ -824,7 +824,7 @@ def shape_center(vtk_file):
 
 def calculate_distances(tab_2DMRI, tab_3Dslice):
     """
-    Calculate the Euclidean distances between corresponding centers in tab_2DMRI and tab_3Dslice.
+    Calculate the Euclidean distances coords by coords between corresponding centers in tab_2DMRI and tab_3Dslice.
     """
     distances = []
     for centre_2D, centre_3D in zip(tab_2DMRI, tab_3Dslice):
@@ -832,6 +832,12 @@ def calculate_distances(tab_2DMRI, tab_3Dslice):
         distances.append(distance)
     return distances
 
+def calculate_distances_abs(centre_2D, centre_3D):
+    """
+    Calculate the distances between corresponding centers in tab_2DMRI and tab_3Dslice.
+    """
+    distance = np.linalg.norm(np.array(centre_2D) - np.array(centre_3D))
+    return distance
 
 def gap_calculator_array(points_A, points_B):
     gap = np.linalg.norm(points_A - points_B)
@@ -961,7 +967,30 @@ def generate_vtk_path(basepath, i, j, k):
 basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
 run_simulation(basepath, (0, 11), (0, 6), (0, 6), generate_feb_path, generate_vtk_path)
 
-
+#%% To extract data we need to apply the "warp by vector" function to our file
+for i in range(0,11):
+    for j in range(6):
+        for k in range(6):
+            for t in range(40):  
+                reader = vtk.vtkUnstructuredGridReader()
+                reader.SetFileName(f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/Output_WH_{k}_{j}_{i}.{t}.vtk")
+                reader.Update()
+                # Create the warp vector filter and set its input
+                warp_vector = vtk.vtkWarpVector()
+                warp_vector.SetInputData(reader.GetOutput())
+    
+                # Update the warp vector filter to apply the warp
+                warp_vector.Update()
+    
+                # Write the warped model to a new VTK file
+                writer = vtk.vtkUnstructuredGridWriter()
+                writer.SetFileName(f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/Output_WH_Warped_{k}_{j}_{i}.{t}.vtk")
+                writer.SetInputData(warp_vector.GetOutput())
+                writer.Write()
+            
+    
+                print(f'Run : Output_WH_{k}_{j}_{i}.{t}.vtk"')
+ 
 
 #%% Extracting result
 import os
@@ -975,7 +1004,7 @@ for i in range(0,11):
             path_3D = basepath
             output_dir1 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_29"
             input_seg1 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk"
-            file3D_pattern = f"Output_WH_{k}_{j}_{i}.{{t}}.vtk"
+            file3D_pattern = f"Output_WH_Warped_{k}_{j}_{i}.{{t}}.vtk"
             seg_pattern = "rotated_{t}.vtk"
             output_pattern = f"transverse_slice_{k}_{j}_{i}.{{t:02d}}.vtk"
             step = 40
@@ -1005,174 +1034,7 @@ for i in range(0,11):
             vtk2Dslicer(path_3D, input_seg8, output_dir8, file3D_pattern, seg_pattern_LVOT, output_pattern, step)
 
 
-#%% Extracting result
-import os
 
-
-for i in range(0,11):
-    for j in range(6):
-        for k in range(6):
-            # Cines 29
-            input_path_2DMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk"
-            input_path_3Dslice = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_29"  ##tranverse slice
-            tab_2DMRI = np.empty((0, 3), int)
-            tab_3Dslice = np.empty((0, 3), int)
-            tab_gap= np.empty((0, 3), int)
-            distance_CINES_29=[]
-            for t in range(40) :
-                # Calculate &stock the coordinates of the center of the 2D MRI shape 
-                vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-                print(vtk_file_2DMRI)
-                centre_2DMRI = shape_center(vtk_file_2DMRI)
-                tab_2DMRI = np.vstack([tab_2DMRI, centre_2DMRI])
-                # Calculate &stock the coordinates of the center of the 3D model slice
-                vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-                print(vtk_file_3Dslice)
-                centre_3Dslice = shape_center(vtk_file_3Dslice)
-                tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
-                # print("At step ", i, " Coordinates of the aorta centre :", centre)
-                points_2DMRI=read_points_vtk(vtk_file_2DMRI)
-                points_3Dslice=read_points_vtk(vtk_file_3Dslice)
-                tab_gap= np.vstack([tab_gap, centre_3Dslice])
-                # Calculate distances between centers for each timestep
-                distances = calculate_distances(tab_2DMRI, tab_3Dslice)
-            distance_CINES_29.append(distances)
-            # Cines 30
-            input_path_2DMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_30/AO_SINUS_STACK_CINES_30_vtk"
-            input_path_3Dslice = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_30"  ##tranverse slice
-            tab_2DMRI = np.empty((0, 3), int)
-            tab_3Dslice = np.empty((0, 3), int)
-            tab_gap= np.empty((0, 3), int)
-            distance_CINES_30=[]
-            for t in range(40) :
-                # Calculate &stock the coordinates of the center of the 2D MRI shape 
-                vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-                print(vtk_file_2DMRI)
-                centre_2DMRI = shape_center(vtk_file_2DMRI)
-                tab_2DMRI = np.vstack([tab_2DMRI, centre_2DMRI])
-                # Calculate &stock the coordinates of the center of the 3D model slice
-                vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-                print(vtk_file_3Dslice)
-                centre_3Dslice = shape_center(vtk_file_3Dslice)
-                tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
-                # print("At step ", i, " Coordinates of the aorta centre :", centre)
-                points_2DMRI=read_points_vtk(vtk_file_2DMRI)
-                points_3Dslice=read_points_vtk(vtk_file_3Dslice)
-                tab_gap= np.vstack([tab_gap, centre_3Dslice])
-                # Calculate distances between centers for each timestep
-                distances = calculate_distances(tab_2DMRI, tab_3Dslice)
-            distance_CINES_30.append(distances)
-            # Cines 31
-            input_path_2DMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_31/AO_SINUS_STACK_CINES_31_vtk"
-            input_path_3Dslice = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_31"  ##tranverse slice
-            tab_2DMRI = np.empty((0, 3), int)
-            tab_3Dslice = np.empty((0, 3), int)
-            tab_gap= np.empty((0, 3), int)
-            distance_CINES_31=[]
-            for t in range(40) :
-                # Calculate &stock the coordinates of the center of the 2D MRI shape 
-                vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-                print(vtk_file_2DMRI)
-                centre_2DMRI = shape_center(vtk_file_2DMRI)
-                tab_2DMRI = np.vstack([tab_2DMRI, centre_2DMRI])
-                # Calculate &stock the coordinates of the center of the 3D model slice
-                vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-                print(vtk_file_3Dslice)
-                centre_3Dslice = shape_center(vtk_file_3Dslice)
-                tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
-                # print("At step ", i, " Coordinates of the aorta centre :", centre)
-                points_2DMRI=read_points_vtk(vtk_file_2DMRI)
-                points_3Dslice=read_points_vtk(vtk_file_3Dslice)
-                tab_gap= np.vstack([tab_gap, centre_3Dslice])
-                # Calculate distances between centers for each timestep
-                distances = calculate_distances(tab_2DMRI, tab_3Dslice)
-            distance_CINES_31.append(distances)
-            # Cines 32
-            input_path_2DMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_32/AO_SINUS_STACK_CINES_32_vtk"
-            input_path_3Dslice = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_32"  ##tranverse slice
-            tab_2DMRI = np.empty((0, 3), int)
-            tab_3Dslice = np.empty((0, 3), int)
-            tab_gap= np.empty((0, 3), int)
-            distance_CINES_32=[]
-            for t in range(40) :
-                # Calculate &stock the coordinates of the center of the 2D MRI shape 
-                vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-                print(vtk_file_2DMRI)
-                centre_2DMRI = shape_center(vtk_file_2DMRI)
-                tab_2DMRI = np.vstack([tab_2DMRI, centre_2DMRI])
-                # Calculate &stock the coordinates of the center of the 3D model slice
-                vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-                print(vtk_file_3Dslice)
-                centre_3Dslice = shape_center(vtk_file_3Dslice)
-                tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
-                # print("At step ", i, " Coordinates of the aorta centre :", centre)
-                points_2DMRI=read_points_vtk(vtk_file_2DMRI)
-                points_3Dslice=read_points_vtk(vtk_file_3Dslice)
-                tab_gap= np.vstack([tab_gap, centre_3Dslice])
-                # Calculate distances between centers for each timestep
-                distances = calculate_distances(tab_2DMRI, tab_3Dslice)
-            distance_CINES_32.append(distances)
-            # Cines 33
-            input_path_2DMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_33/AO_SINUS_STACK_CINES_33_vtk"
-            input_path_3Dslice = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_33"  ##tranverse slice
-            tab_2DMRI = np.empty((0, 3), int)
-            tab_3Dslice = np.empty((0, 3), int)
-            tab_gap= np.empty((0, 3), int)
-            distance_CINES_33=[]
-            for t in range(40) :
-                # Calculate &stock the coordinates of the center of the 2D MRI shape 
-                vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-                print(vtk_file_2DMRI)
-                centre_2DMRI = shape_center(vtk_file_2DMRI)
-                tab_2DMRI = np.vstack([tab_2DMRI, centre_2DMRI])
-                # Calculate &stock the coordinates of the center of the 3D model slice
-                vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-                print(vtk_file_3Dslice)
-                centre_3Dslice = shape_center(vtk_file_3Dslice)
-                tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
-                # print("At step ", i, " Coordinates of the aorta centre :", centre)
-                points_2DMRI=read_points_vtk(vtk_file_2DMRI)
-                points_3Dslice=read_points_vtk(vtk_file_3Dslice)
-                tab_gap= np.vstack([tab_gap, centre_3Dslice])
-                # Calculate distances between centers for each timestep
-                distances = calculate_distances(tab_2DMRI, tab_3Dslice)
-            distance_CINES_33.append(distances)
-            # Cines 34
-            input_path_2DMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk"
-            input_path_3Dslice = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_34"  ##tranverse slice
-            tab_2DMRI = np.empty((0, 3), int)
-            tab_3Dslice = np.empty((0, 3), int)
-            tab_gap= np.empty((0, 3), int)
-            distance_CINES_34=[]
-            for t in range(40) :
-                # Calculate &stock the coordinates of the center of the 2D MRI shape 
-                vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-                print(vtk_file_2DMRI)
-                centre_2DMRI = shape_center(vtk_file_2DMRI)
-                tab_2DMRI = np.vstack([tab_2DMRI, centre_2DMRI])
-                # Calculate &stock the coordinates of the center of the 3D model slice
-                vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-                print(vtk_file_3Dslice)
-                centre_3Dslice = shape_center(vtk_file_3Dslice)
-                tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
-                # print("At step ", i, " Coordinates of the aorta centre :", centre)
-                points_2DMRI=read_points_vtk(vtk_file_2DMRI)
-                points_3Dslice=read_points_vtk(vtk_file_3Dslice)
-                tab_gap= np.vstack([tab_gap, centre_3Dslice])
-                # Calculate distances between centers for each timestep
-                distances = calculate_distances(tab_2DMRI, tab_3Dslice)
-            distance_CINES_34.append(distances)
-
-
-
-
-
-print("distance 29: ", distance_CINES_29)
-print("distance 30: ", distance_CINES_30)
-print("distance 31: ", distance_CINES_31)
-print("distance 32: ", distance_CINES_32)
-print("distance 33: ", distance_CINES_33)
-print("distance 34: ", distance_CINES_34)
 
 #%%
 import os
@@ -1181,54 +1043,145 @@ import pandas as pd
 
 # Assuming shape_center, read_points_vtk, and calculate_distances are defined elsewhere
 
-# Initialize a list to store all data
+# Initialize a dictionary to store all data
 all_data = []
 
 for i in range(0, 11):
     for j in range(6):
         for k in range(6):
-            for cine in [29, 30, 31, 32, 33, 34]:
-                input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
-                input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_{cine}"
+            for t in range(40):
+                row_data = {'i': i, 'j': j, 'k': k, 't': t}
 
-                tab_2DMRI = np.empty((0, 3), int)
-                tab_3Dslice = np.empty((0, 3), int)
-                tab_gap = np.empty((0, 3), int)
-
-                distance_list = []
-
-                for t in range(40):
+                for cine in [29, 30, 31, 32, 33, 34]:
+                    input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+                    input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_{cine}"
+                    #Extracting center coords from the 2D MRI
                     vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
                     centre_2DMRI = shape_center(vtk_file_2DMRI)
-                    tab_2DMRI = np.vstack([tab_2DMRI, centre_2DMRI])
-                    print(vtk_file_2DMRI)
-
+                    # print(vtk_file_2DMRI)
+                    #Extracting center coords from the slice from the 3D model
                     vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
                     centre_3Dslice = shape_center(vtk_file_3Dslice)
-                    tab_3Dslice = np.vstack([tab_3Dslice, centre_3Dslice])
                     print(vtk_file_3Dslice)
 
                     points_2DMRI = read_points_vtk(vtk_file_2DMRI)
                     points_3Dslice = read_points_vtk(vtk_file_3Dslice)
-                    tab_gap = np.vstack([tab_gap, centre_3Dslice])
+                
+                    distance = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
+                    print(distance)
 
-                    distances = calculate_distances(tab_2DMRI, tab_3Dslice)
-                    distance_list.append(distances)
+                    row_data[f'distance_CINES_{cine}'] = distance
+                    
+                all_data.append(row_data)
 
-                    # Append data to the list
-                    all_data.append({
-                        'i': i,
-                        'j': j,
-                        'k': k,
-                        't': t,
-                        f'distance_CINES_{cine}': distances[t]
-                    })
 
 # Create a DataFrame from the list of data
 df = pd.DataFrame(all_data)
 
 # Save the DataFrame to an Excel file
-df.to_excel("center_distance_data.xlsx", index=False)
+df.to_excel("center_distance_data_V3.xlsx", index=False)
 
 
+# %% Regression multiple
+import pandas as pd
+import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+# Charger les données
+file_path = "C:/Users/jr403s/Internship_JR_Glasgow/code/center_distance_data_V3_test.xlsx"
+data = pd.read_excel(file_path)
+
+# Filtrer les données pour t = 15
+t_constant_data = data[data['t'] == 15].dropna()
+
+# Définir les variables indépendantes et dépendantes
+X = t_constant_data[['i', 'j', 'k']]
+y = t_constant_data['distance_CINES_29']
+
+# Ajouter une constante pour l'interception
+X = sm.add_constant(X)
+
+# Ajuster le modèle de régression multiple
+model = sm.OLS(y, X).fit()
+
+# Résumé du modèle
+print(model.summary())
+
+# Calculer le VIF pour chaque variable indépendante
+vif_data = pd.DataFrame()
+vif_data["feature"] = X.columns
+vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.columns))]
+print(vif_data)
+
+# %%
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+
+# access data
+file_path =  "C:/Users/jr403s/Internship_JR_Glasgow/code/center_distance_data_V3_test.xlsx"
+data = pd.read_excel(file_path)
+
+# Filtrer les données pour t = 15 fixe
+t_constant_data = data[data['t'] == 15].dropna()
+
+# Définir les variables indépendantes et dépendantes
+X = t_constant_data[['i', 'j', 'k']]
+y = t_constant_data['distance_CINES_29']
+
+poly = PolynomialFeatures(degree=2)
+X_poly = poly.fit_transform(X)
+
+# Diviser les données en ensembles d'entraînement et de test
+X_train, X_test, y_train, y_test = train_test_split(X_poly, y, test_size=0.2, random_state=42)
+
+# Ajuster le modèle de régression polynomiale
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+# Prédire sur l'ensemble de test
+y_pred = model.predict(X_test)
+
+# Évaluer le modèle
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+
+print("------ Regression polynomiale ------")
+print("Mean Squared Error:", mse)
+print("R-squared:", r2)
+
+# %%
+import pandas as pd
+import numpy as np
+import plotly.express as px
+
+# Load the Excel file
+file_path = "C:/Users/jr403s/Internship_JR_Glasgow/code/center_distance_data_V3_test.xlsx"
+data = pd.read_excel(file_path)
+
+# Filter data for t = 15
+t_constant_data = data[data['t'] == 15].copy()
+
+# Calculate the norm of the vectors (i, j, k)
+t_constant_data['norm'] = np.sqrt(t_constant_data['i']**2 + t_constant_data['j']**2 + t_constant_data['k']**2)
+
+# Plot the relationship between Norm and distance_CINES_29
+fig1 = px.scatter(t_constant_data, x='norm', y='distance_CINES_29',
+                   title='Relation entre la Norme et la Distance CINES 29',
+                   labels={'norm': 'Norme', 'distance_CINES_29': 'Distance CINES 29'})
+
+# Calculate the number of combinations (i, j, k) for each norm value
+norm_counts = t_constant_data.groupby('norm').size().reset_index(name='count')
+
+# Plot the number of combinations for each norm value
+fig2 = px.bar(norm_counts, x='norm', y='count',
+               title='Nombre de combinaisons (i, j, k) par Norme',
+               labels={'norm': 'Norme', 'count': 'Nombre de combinaisons'})
+
+# Show plots
+fig1.show(), fig2.show()
 # %%
