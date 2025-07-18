@@ -336,7 +336,6 @@ fig.update_layout(
 
 fig.show()
 
-
 #%%
 # Python tool  aiming to modify the boundaries of the febio model
 def modify_feb_file(input_file_path, output_file_path, new_boundary_conditions):
@@ -378,3 +377,209 @@ new_boundary_conditions =  [
 
 modify_feb_file(input_file_path, output_file_path, new_boundary_conditions)
 print("modification done")
+
+
+
+# %% Regression multiple
+import pandas as pd
+import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+
+# Charger les données
+file_path = "C:/Users/jr403s/Internship_JR_Glasgow/code/center_distance_data_V3_test.xlsx"
+data = pd.read_excel(file_path)
+
+# Filtrer les données pour t = 15
+t_constant_data = data[data['t'] == 15].dropna()
+
+# Définir les variables indépendantes et dépendantes
+X = t_constant_data[['i', 'j', 'k']]
+y = t_constant_data['distance_CINES_29']
+
+# Ajouter une constante pour l'interception
+X = sm.add_constant(X)
+
+# Ajuster le modèle de régression multiple
+model = sm.OLS(y, X).fit()
+
+# Résumé du modèle
+print(model.summary())
+
+# Calculer le VIF pour chaque variable indépendante
+vif_data = pd.DataFrame()
+vif_data["feature"] = X.columns
+vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.columns))]
+print(vif_data)
+
+# %% Regression polynomiale
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.linear_model import LinearRegression
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+
+# access data
+file_path =  "C:/Users/jr403s/Internship_JR_Glasgow/code/center_distance_data_V3_test.xlsx"
+data = pd.read_excel(file_path)
+
+# Filtrer les données pour t = 15 fixe
+t_constant_data = data[data['t'] == 15].dropna()
+
+# Définir les variables indépendantes et dépendantes
+X = t_constant_data[['i', 'j', 'k']]
+y = t_constant_data['distance_CINES_29']
+
+poly = PolynomialFeatures(degree=2)
+X_poly = poly.fit_transform(X)
+
+# Diviser les données en ensembles d'entraînement et de test
+X_train, X_test, y_train, y_test = train_test_split(X_poly, y, test_size=0.2, random_state=42)
+
+# Ajuster le modèle de régression polynomiale
+model = LinearRegression()
+model.fit(X_train, y_train)
+
+# Prédire sur l'ensemble de test
+y_pred = model.predict(X_test)
+
+# Évaluer le modèle
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+
+
+print("------ Regression polynomiale ------")
+print("Mean Squared Error:", mse)
+print("R-squared:", r2)
+
+# %% Plot distance_CINES_XX/xyz_norm
+import pandas as pd
+import numpy as np
+import plotly.express as px
+
+# Load the Excel file
+file_path = "C:/Users/jr403s/Documents/code/center_distance_data_V3.xlsx"
+data = pd.read_excel(file_path)
+
+# Filter data for t = 15
+t_constant_data = data[data['t'] == 15].copy()
+
+# Calculate the norm of the vectors (i, j, k)
+t_constant_data['norm'] = np.sqrt(t_constant_data['i']**2 + t_constant_data['j']**2 + t_constant_data['k']**2)
+for cine in [29, 30, 31, 32, 33, 34]:
+    # Calculate mean and standard deviation for each norm value
+    stats = t_constant_data.groupby('norm')[f'distance_CINES_{cine}'].agg(['mean', 'std']).reset_index()
+
+    # Plot the relationship between Norm and distance_CINES_<cine>
+    fig1 = px.scatter(t_constant_data, x='norm', y=f"distance_CINES_{cine}",
+                     title=f"Relation entre la Norme et la Distance CINES {cine}",
+                     labels={'norm': 'Norme', f"distance_CINES_{cine}": f"Distance CINES {cine}"},
+                     trendline="ols")  # Add linear trendline
+
+   
+    
+    # Add standard deviation to the plot
+    fig1.add_trace(go.Scatter(
+        x=stats['norm'],
+        y=stats['mean'] + stats['std'],
+        mode='lines',
+        line=dict(width=0),
+        showlegend=False
+    ))
+
+    fig1.add_trace(go.Scatter(
+        x=stats['norm'],
+        y=stats['mean']- stats['std'],
+        mode='lines',
+        line=dict(width=0),
+        fillcolor='rgba(68, 68, 68, 0.3)',
+        fill='tonexty',
+        showlegend=False
+    ))
+
+
+    ##########################################################
+    # Plot the number of combinations for each norm value
+    fig2 = px.bar(norm_counts, x='norm', y='count',
+                title='Nombre de combinaisons (i, j, k) par Norme',
+                labels={'norm': 'Norme', 'count': 'Nombre de combinaisons'})
+
+    # Show plots3433
+    fig1.show(), fig2.show()
+
+
+#%% Point tarcker for LVOT (Associating key points from the MRI 2D segmentation to the 3D model)
+
+def find_closest_point(aorta_points, second_point):
+    distances = np.linalg.norm(aorta_points - second_point, axis=1)
+    closest_point_index = np.argmin(distances)
+    return (aorta_points[closest_point_index], closest_point_index)
+
+
+def write_vtk_points(file_path, points):
+    points_vtk = vtk.vtkPoints()
+    for point in points:
+        points_vtk.InsertNextPoint(point)
+
+    polydata = vtk.vtkPolyData()
+    polydata.SetPoints(points_vtk)
+
+    writer = vtk.vtkPolyDataWriter()
+    writer.SetFileName(file_path)
+    writer.SetInputData(polydata)
+    writer.Write()
+
+# Use case
+aorta_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/transverse_slice_{i:03d}.vtk"
+segment_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/rotated_surface_{j}_time_00.vtk"
+output_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/closest_points_{j:02d}_pts_{i:02d}.vtk"
+
+# Initialisation des listes pour stocker les distances
+height = []
+distances_bottom = []
+distances_mid = []
+distances_top = []
+
+# Dictionnaire pour stocker les points de chaque surface à chaque timestep
+surface_points = {j: [] for j in range(1, 8)}
+
+for i in range(40):
+    for j in range(1, 8):
+        aorta_file = aorta_file_pattern.format(i=i)
+        segment_file = segment_file_pattern.format(j=j)
+
+        aorta_points = read_points_vtk(aorta_file)
+        aorta_pts_array = np.array([aorta_points.GetPoint(k) for k in range(aorta_points.GetNumberOfPoints())])
+        segment_points = read_points_vtk(segment_file)
+        segment_pts_array = np.array([segment_points.GetPoint(k) for k in range(segment_points.GetNumberOfPoints())])
+
+        if i == 0:
+            # Trouver le point le plus proche pour le premier timestep
+            closest_point, closest_index = find_closest_point(aorta_pts_array, np.mean(segment_pts_array, axis=0))
+        else:
+            # Trouver le point le plus proche du point précédent
+            closest_point, closest_index = find_closest_point(aorta_pts_array, surface_points[j][-1])
+
+        # Stocker le point pour la surface actuelle et le timestep actuel
+        surface_points[j].append(closest_point)
+
+        # Écrire le point le plus proche
+        output_file = output_file_pattern.format(j=j, i=i)
+        write_vtk_points(output_file, [closest_point])
+
+    # Calculer et stocker les distances entre les paires de points spécifiées pour le timestep actuel
+    if i < len(surface_points[1]):  # Assurez-vous que les points existent pour ce timestep
+        height.append(np.linalg.norm(surface_points[1][i] - surface_points[2][i]))
+        distances_bottom.append(np.linalg.norm(surface_points[2][i] - surface_points[3][i]))
+        distances_mid.append(np.linalg.norm(surface_points[4][i] - surface_points[5][i]))
+        distances_top.append(np.linalg.norm(surface_points[6][i] - surface_points[7][i]))
+
+
+
+
+# Affichage des distances calculées
+print("Distances entre les points 1 et 2 :", height)
+print("Distances entre les points 2 et 3 :", distances_bottom)
+print("Distances entre les points 4 et 5 :", distances_mid)
+print("Distances entre les points 6 et 7 :", distances_top)
+

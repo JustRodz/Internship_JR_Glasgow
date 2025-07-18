@@ -208,22 +208,9 @@ def calc_rota_matrix(primary_coord_system, second_coord_system):
     return(R)
 
 
-input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim.feb"
-node_of_interest=find_presc_disp_node(input_file_path)
-nodes_data= extract_nodeset_data(input_file_path, node_of_interest)
-node_coordinates = extract_node_coordinates(input_file_path)
-print("Coordinates :")
-print(node_of_interest)
-print("Finished the search")
-print(nodes_data[0][3])
-print("Finished extracting node`s data")
-original_coord_system = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]]) #We theorise that the feb file coordinate system is the orthonormal direct system
-BC_coord_system = nodes_data[0][3]
-transform_matrix = calc_rota_matrix(BC_coord_system, original_coord_system)
-print(transform_matrix)
 
 
-#%% Useful to modify the values of a specified B.C
+#Useful to modify the values of a specified B.C
 def update_BC_parameters(febio_file, boundary_name, updates, output_file_path=None):
     # Load the XML file
     tree = ET.parse(febio_file)
@@ -255,9 +242,62 @@ def update_BC_parameters(febio_file, boundary_name, updates, output_file_path=No
         f.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
         tree.write(f, encoding='unicode')
 
-updates = {'initial_value': 0, 'relative': 0}
-file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
-update_BC_parameters(file_path, "PrescribedDisplacement2", updates)
+
+############################################################
+####### Test 1 #############################################
+############################################################
+## Test the node extraction & other pleliminary functions ##
+
+# input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim.feb"
+# node_of_interest=find_presc_disp_node(input_file_path)
+# nodes_data= extract_nodeset_data(input_file_path, node_of_interest)
+# node_coordinates = extract_node_coordinates(input_file_path)
+# print("Coordinates :")
+# print(node_of_interest)
+# print("Finished the search")
+# print(nodes_data[0][3])
+# print("Finished extracting node`s data")
+# original_coord_system = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]]) #We theorise that the feb file coordinate system is the orthonormal direct system
+# BC_coord_system = nodes_data[0][3]
+# transform_matrix = calc_rota_matrix(BC_coord_system, original_coord_system)
+# print(transform_matrix)
+
+############################################################
+####### Test 2 #############################################
+############################################################
+## Test the update B.C part ##
+
+# updates = {'initial_value': 0, 'relative': 0}
+# file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
+# update_BC_parameters(file_path, "PrescribedDisplacement2", updates)
+
+
+
+#%% Script using Update_BC_parameters to adjust our simulation
+
+input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim.feb"
+node_of_interest=find_presc_disp_node(input_file_path)
+nodes_data= extract_nodeset_data(input_file_path, node_of_interest)
+node_coordinates = extract_node_coordinates(input_file_path)
+original_coord_system = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]]) #We theorise that the feb file coordinate system is the orthonormal direct system
+BC_coord_system = nodes_data[0][3]
+R = calc_rota_matrix(BC_coord_system, original_coord_system)
+
+file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
+output_dir= "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation" 
+for i in range (-5,6):
+    for j in range (-5, 6):
+        for k in range (-2, -1):
+            coords =np.array([i, j, k])
+            coords_xyz = np.dot(R, coords) 
+            output = os.path.join(output_dir, f"Whole_heart_2016_42_mesh_V3_PreSim_{i}_{j}_{k}.feb")
+            x_bc = {'initial_value': coords_xyz[0]}
+            update_BC_parameters(file_path, "PrescribedDisplacement2", x_bc, output)
+            y_bc = {'initial_value': coords_xyz[1]}
+            update_BC_parameters(output, "PrescribedDisplacement3", y_bc)
+            z_bc = {'initial_value': coords_xyz[2]}
+            update_BC_parameters(output, "PrescribedDisplacement4", z_bc)
+
 
 #%%#%% Useful to modify the type of output file
 def update_output(febio_file, updates, output_file_path=None):
@@ -280,48 +320,20 @@ def update_output(febio_file, updates, output_file_path=None):
 
 updates = {'new_type': 'vtk'}
 input_dir = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
-for i in range (0,6):
-    for j in range (0, 6):
-        for k in range (0, 11):
+for i in range (-5,6):
+    for j in range (-5, 6):
+        for k in range (-2, -1):
             file_path = os.path.join(input_dir, f"Whole_heart_2016_42_mesh_V3_PreSim_{i}_{j}_{k}.feb")
             update_output(file_path, updates)
 
-#%% Script to test Update_BC_parameters
-
-input_file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim.feb"
-node_of_interest=find_presc_disp_node(input_file_path)
-nodes_data= extract_nodeset_data(input_file_path, node_of_interest)
-node_coordinates = extract_node_coordinates(input_file_path)
-original_coord_system = np.array([[1.0, 0.0, 0.0],[0.0, 1.0, 0.0],[0.0, 0.0, 1.0]]) #We theorise that the feb file coordinate system is the orthonormal direct system
-BC_coord_system = nodes_data[0][3]
-R = calc_rota_matrix(BC_coord_system, original_coord_system)
-
-file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
-output_dir= "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation" 
-for i in range (0,6):
-    for j in range (0, 6):
-        for k in range (0, 11):
-            coords =np.array([i, j, k])
-            coords_xyz = np.dot(R, coords) 
-            output = os.path.join(output_dir, f"Whole_heart_2016_42_mesh_V3_PreSim_{i}_{j}_{k}.feb")
-            x_bc = {'initial_value': coords_xyz[0]}
-            update_BC_parameters(file_path, "PrescribedDisplacement2", x_bc, output)
-            y_bc = {'initial_value': coords_xyz[1]}
-            update_BC_parameters(output, "PrescribedDisplacement3", y_bc)
-            z_bc = {'initial_value': coords_xyz[2]}
-            update_BC_parameters(output, "PrescribedDisplacement4", z_bc)
-
-
-
-#%%
-# Saving the header of the segmentation (useful to rotate the model)
+#%% Saving the header of the segmentation (useful to rotate the model)
 def Seg_header(file_path, seg_path, output_path):
     affine = nib.load(file_path).affine  ##retrieves the affine transformation matrix from the NIfTI file (image coord -> IRL coord)
     mask = nib.load(seg_path).get_fdata()  ##Get_fdata transforms NifTy image data into a NumPy array
     ##plt.imshow(mask[:,:,0,0])
     np.save(output_path,affine)
 
-#%% LVOT
+#%% LvotSeg2vtk
 def LvotSeg2vtk(nifti_path, segmentation_path, output_dir):
     affine = nib.load(nifti_path).affine  ##retrieves the affine transformation matrix from the NIfTI file (image coord -> IRL coord)
     mask = nib.load(segmentation_path).get_fdata()
@@ -363,7 +375,7 @@ LVOT_vtk_conversion = LvotSeg2vtk(affine, mask, output_dir)
 print("LVOT segmentation converted to vtk")
 
 
-#%% 
+#%% Interpolation
 ## Warning : The interpolator_points function tend to causes issue with complex 3D curves( Creating points in the volume but not along the curves)
 def interpolator_points(points, target_point_number):
     """
@@ -403,7 +415,8 @@ def interpolate_along_curve(points, target_point_number):
         interpolated_points[:, i] = f(target_distances)
     return interpolated_points
 
-#%% Other Strategy to extract the contour of a segmentation using the Gradient methodology. Main issue = Point are ordered based on their z coordinate (noncontinuous curve) + rougher shape
+#%% Seg2contours
+# Other Strategy to extract the contour of a segmentation using the Gradient methodology. Main issue = Point are ordered based on their z coordinate (noncontinuous curve) + rougher shape
 #Don`t use for LVOT seg where we omly export key points and a plain shape  
 def Seg2Contours(nifti_path, segmentation_path, output_dir, affine_save_path):
     """
@@ -491,7 +504,7 @@ print("vtk conversion done")
 
 
 
-#%%
+#%% rotate_vtk + rotate_LVOT
 def rotate_vtk(nifti_path, grad_path, output_path, A):
     """
     nifti_path (str): Path to the original NIfTI file (to extract the affine matrix).
@@ -579,7 +592,7 @@ print("vtk rotation done")
 
 
 
-#%%
+#%% vtk2Dslicer
 import os
 import vtk
 import numpy as np
@@ -680,123 +693,11 @@ def vtk2Dslicer (model_path, input_seg_path, output_path, model3D_name_pattern, 
 # print("Model sliced")
 
 
-#%% Associating key points from the MRI 2D segmentation to the 3D model
-
-def find_closest_point(aorta_points, second_point):
-    distances = np.linalg.norm(aorta_points - second_point, axis=1)
-    closest_point_index = np.argmin(distances)
-    return (aorta_points[closest_point_index], closest_point_index)
-
-
-def write_vtk_points(file_path, points):
-    points_vtk = vtk.vtkPoints()
-    for point in points:
-        points_vtk.InsertNextPoint(point)
-
-    polydata = vtk.vtkPolyData()
-    polydata.SetPoints(points_vtk)
-
-    writer = vtk.vtkPolyDataWriter()
-    writer.SetFileName(file_path)
-    writer.SetInputData(polydata)
-    writer.Write()
-
-# Use case
-aorta_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/transverse_slice_{i:03d}.vtk"
-segment_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/rotated_surface_{j}_time_00.vtk"
-output_file_pattern = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk/closest_points_{j:02d}_pts_{i:02d}.vtk"
-
-# Initialisation des listes pour stocker les distances
-height = []
-distances_bottom = []
-distances_mid = []
-distances_top = []
-
-# Dictionnaire pour stocker les points de chaque surface à chaque timestep
-surface_points = {j: [] for j in range(1, 8)}
-
-for i in range(40):
-    for j in range(1, 8):
-        aorta_file = aorta_file_pattern.format(i=i)
-        segment_file = segment_file_pattern.format(j=j)
-
-        aorta_points = read_points_vtk(aorta_file)
-        aorta_pts_array = np.array([aorta_points.GetPoint(k) for k in range(aorta_points.GetNumberOfPoints())])
-        segment_points = read_points_vtk(segment_file)
-        segment_pts_array = np.array([segment_points.GetPoint(k) for k in range(segment_points.GetNumberOfPoints())])
-
-        if i == 0:
-            # Trouver le point le plus proche pour le premier timestep
-            closest_point, closest_index = find_closest_point(aorta_pts_array, np.mean(segment_pts_array, axis=0))
-        else:
-            # Trouver le point le plus proche du point précédent
-            closest_point, closest_index = find_closest_point(aorta_pts_array, surface_points[j][-1])
-
-        # Stocker le point pour la surface actuelle et le timestep actuel
-        surface_points[j].append(closest_point)
-
-        # Écrire le point le plus proche
-        output_file = output_file_pattern.format(j=j, i=i)
-        write_vtk_points(output_file, [closest_point])
-
-    # Calculer et stocker les distances entre les paires de points spécifiées pour le timestep actuel
-    if i < len(surface_points[1]):  # Assurez-vous que les points existent pour ce timestep
-        height.append(np.linalg.norm(surface_points[1][i] - surface_points[2][i]))
-        distances_bottom.append(np.linalg.norm(surface_points[2][i] - surface_points[3][i]))
-        distances_mid.append(np.linalg.norm(surface_points[4][i] - surface_points[5][i]))
-        distances_top.append(np.linalg.norm(surface_points[6][i] - surface_points[7][i]))
 
 
 
 
-# Affichage des distances calculées
-print("Distances entre les points 1 et 2 :", height)
-print("Distances entre les points 2 et 3 :", distances_bottom)
-print("Distances entre les points 4 et 5 :", distances_mid)
-print("Distances entre les points 6 et 7 :", distances_top)
-
-
-#%%
-import vtk
-import numpy as np
-
-def extract_endpoints(filename):
-    reader = vtk.vtkUnstructuredGridReader()
-    reader.SetFileName(filename)
-    reader.Update()
-
-    # get data and lines
-    data = reader.GetOutput()
-    lines = data.GetLines()
-
-    # Initialise the liste
-    endpoints = []
-
-    # finding extremities
-    lines.InitTraversal()
-    idList = vtk.vtkIdList()
-    while lines.GetNextCell(idList):
-        if idList.GetNumberOfIds() > 0:
-            # adding first and last point to the line
-            endpoints.append(idList.GetId(0))
-            endpoints.append(idList.GetId(idList.GetNumberOfIds() - 1))
-
-    # Extract coordinates
-    points = data.GetPoints()
-    endpoint_coordinates = [points.GetPoint(i) for i in endpoints]
-
-    return endpoint_coordinates
-
-# Use case
-filename = 'votre_fichier.vtk'
-endpoints = extract_endpoints(filename)
-print("Points des extrémités :", endpoints)
-
-
-
-
-
-# %% Useful to obtain the coordinate of the center of a 2D shape
+# %% Shape_center + Calculate_distances
 def shape_center(vtk_file):
     """
     vtk_file (str): Input file for the existing 3D model.
@@ -891,6 +792,167 @@ def gap_calculator_vtk(points_A, points_B):
 #     print(f"Distance at timestep {i}: {distance}")
 
 
+
+# %% Reordering points if we have a non continuous outline
+def reorder_points(points,  distance_threshold):
+    """
+    This function is required because the slice generated link points by their z-value, thus creating a non-continuous path.
+
+    The funtion reorders a list of 3D points to form a continuous path.
+    This method follows a nearest neighbour algorithm:
+    it starts from the first point and at each step adds the nearest point
+    of those not yet used.
+    
+    Args:
+        points (np.ndarray): array of shapes (N, 3), representing 3D points.
+        distance threshold (float): Max distance between two consecutive points
+    """
+
+    # # Copy to avoid modifying the original data
+    points = points.copy()
+
+    # List for storing reordered points
+    ordered = [points[0]]  # We start with the first point of the original list
+
+    # Boolean table to see which points have already been used
+    used = np.zeros(len(points), dtype=bool)
+    used[0] = True  # the first point is already in use
+
+    # Repeat until all points have been used
+    for _ in range(1, len(points)):
+        last_point = ordered[-1]  # last point added
+        # Calculate the distance between the current point and the others
+        dists = np.linalg.norm(points - last_point, axis=1)
+        dists[used] = np.inf  # Skipping pint that are already used
+        # Find the nearest unused point
+        next_index = np.argmin(dists)
+        # Add this point to the ordered list
+        # Check if the distance to the next point is within the threshold
+        if dists[next_index] < distance_threshold:
+            ordered.append(points[next_index])
+            used[next_index] = True
+        else:
+            # If the distance exceeds the threshold, consider it as a separate segment
+            break 
+
+    return np.array(ordered)
+
+
+
+#%% Extract the extremities in the lvot
+
+import vtk
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import splprep, splev
+
+
+def extract_and_fit_curves(filename):
+    # Read the VTK file
+    reader = vtk.vtkPolyDataReader()
+    reader.SetFileName(filename)
+    reader.Update()
+
+    # Get the polydata
+    polydata = reader.GetOutput()
+
+    # Extract the coordinates of all points
+    points = polydata.GetPoints()
+    all_points = np.array([points.GetPoint(i) for i in range(points.GetNumberOfPoints())])
+
+    # Segment points into separate curves based on distance
+    segments = []
+    remaining_points = all_points.copy()
+
+    while len(remaining_points) > 0:
+        segment = reorder_points(remaining_points, 4.0)
+        segments.append(segment)
+        remaining_points = np.array([p for p in remaining_points if not np.any(np.all(p == segment, axis=1))])
+
+    # Collect endpoints
+    endpoints = []
+    for segment in segments:
+        endpoints.append((segment[0], segment[-1]))
+
+
+    # Plot the original points
+    plt.figure(figsize=(8, 6))
+    plt.scatter(all_points[:, 0], all_points[:, 1], c='blue', label='All Points')
+
+    # Fit curves to each segment and plot them
+    for segment in segments:
+        x = segment[:, 0]
+        y = segment[:, 1]
+
+        if len(x) > 3:  # Ensure there are enough points to fit a spline
+            spline, _ = splprep([x, y], s=len(x) /50) #Modify the value of s to adapt the smoothness
+            x_fit, y_fit = splev(np.linspace(0, 1, 100), spline)
+            plt.plot(x_fit, y_fit, c='orange', label='Fitted Curve')
+
+    # Plot endpoints for each segment
+    for segment in segments:
+        plt.scatter(segment[0, 0], segment[0, 1], c='green', label='Endpoints', s=100)
+        plt.scatter(segment[-1, 0], segment[-1, 1], c='green', s=100)
+
+    plt.title('Visualization of Points, Fitted Curves, and Endpoints')
+    plt.xlabel('X Coordinate')
+    plt.ylabel('Y Coordinate')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+    return(endpoints)
+
+# Example usage
+filename = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_LVOT_25/transverse_slice_2_3_6.17.vtk"
+enpoints_test = extract_and_fit_curves(filename)
+print(enpoints_test)
+
+#%% Code a utiliser avec le cluster
+import subprocess
+import multiprocessing
+import xml.etree.ElementTree as ET
+import numpy as np
+import vtk
+import os
+import shutil 
+import time
+ 
+
+def run_simulation(j, i, c, k1, original_febio_file):
+    print(f"Running simulation for c={c[j]}, k1={k1[i]}")
+    output_febio_file = f"param_sweeping/temp_feb_files/arch_split_axes_{j+1:04d}_{i+1:04d}.feb"
+    new_params = {'c': c[j], 'k1': k1[i]}
+    # Update material parameters
+    update_goh_material_parameters(original_febio_file, 
+                                   "Material2", new_params, output_febio_file)
+    # Limit FEBio to 1 CPU thread
+    os.environ["OMP_NUM_THREADS"] = "1"  # Set the number of CPU threads for each simulation
+    # Define the command
+    command = f'FEBioStudio/bin/febio4 {output_febio_file} -silent -p param_sweeping/Run_{j+1:04d}_{i+1:04d}/out{i+1:04d}.vtk'
+    print("Running FEBio simulation",flush=True)
+    try:
+        os.system(command)
+    except Exception as e:
+        print(f"Could not run FEBio: {e}",flush=True)
+ 
+if __name__ == "__main__":
+    c = [a/100 for a in range(1, 11, 1)]  # Define your list of c values
+    k1 = [a/10 for a in range(1, 11)]  # Define your list of k1 values
+    original_febio_file = "param_sweeping/arch_split_axes.feb"
+    num_processes = 12
+    # num_processes = multiprocessing.cpu_count()  # Use all available CPU cores
+    pool = multiprocessing.Pool(processes=num_processes)
+ 
+    tasks = [(j, i, c, k1, original_febio_file) for j in range(len(c)) for i in range(len(k1))]
+ 
+    # Run simulations in parallel
+    pool.starmap(run_simulation, tasks)
+    # Close the pool and wait for all processes to finish
+    pool.close()
+    pool.join()
+
+
 #%% Simulation runner
 import subprocess
 import os
@@ -899,12 +961,12 @@ import os
 basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
 
 #adjust the ranges to coorespond with the simu
-for i in range(0,11):
-    for j in range(6):
-        for k in range(6):
+for x in range(1):
+    for y in range(1):
+        for z in range(-10,11):
             #Specify input and output
-            feb_path = os.path.join(basepath, f"Whole_heart_2016_42_mesh_V3_PreSim_{k}_{j}_{i}.feb")
-            vtk_path = os.path.join(basepath, "jobs", f"Output_WH_{k}_{j}_{i}.vtk")
+            feb_path = os.path.join(basepath, f"Whole_heart_2016_42_mesh_V3_PreSim_{x}_{y}_{z}.feb")
+            vtk_path = os.path.join(basepath,"Simulation_V2", "jobs", f"Output_WH_{x}_{y}_{z}.vtk")
 
             # write the command line and run it
             cmd = ["febio4", "run", "-i", feb_path, "-p", vtk_path]
@@ -913,7 +975,7 @@ for i in range(0,11):
 
             #error case
             if result.returncode != 0:
-                print(f"Error at index {i}:\n{result.stderr}")
+                print(f"Error at index {z}:\n{result.stderr}")
             else:
                 print(result.stdout)
 
@@ -922,7 +984,7 @@ import subprocess
 import os
 
 
-def run_simulation(basepath, i_range, j_range, k_range, feb_path_func, vtk_path_func):
+def run_simulation(basepath, x_range, y_range, z_range, feb_path_func, vtk_path_func):
     """
     Run a simulation using febio4 based on the specified ranges for i, j, and k.
 
@@ -937,12 +999,12 @@ def run_simulation(basepath, i_range, j_range, k_range, feb_path_func, vtk_path_
     Returns:
     - None
     """
-    for i in range(*i_range):
-        for j in range(*j_range):
-            for k in range(*k_range):
+    for x in range(*x_range):
+        for y in range(*y_range):
+            for z in range(*z_range):
                 # Generate paths using the provided functions
-                feb_path = feb_path_func(basepath, i, j, k)
-                vtk_path = vtk_path_func(basepath, i, j, k)
+                feb_path = feb_path_func(basepath, x, y, z)
+                vtk_path = vtk_path_func(basepath, x, y, z)
 
                 # Write the command line and run it
                 cmd = ["febio4", "run", "-i", feb_path, "-p", vtk_path]
@@ -952,57 +1014,72 @@ def run_simulation(basepath, i_range, j_range, k_range, feb_path_func, vtk_path_
 
                 # Error handling
                 if result.returncode != 0:
-                    print(f"Error at index {i}_{j}_{k}:\n{result.stderr}")
+                    print(f"Error at index {x}_{y}_{z}:\n{result.stderr}")
                 else:
                     print(result.stdout)
 
 # functions to generate paths (change the name of the files accordingly)
-def generate_feb_path(basepath, i, j, k):
-    return os.path.join(basepath, f"Whole_heart_2016_42_mesh_V3_PreSim_{k}_{j}_{i}.feb")
+def generate_feb_path(basepath, x, y, z):
+    return os.path.join(basepath, f"Whole_heart_2016_42_mesh_V3_PreSim_{x}_{y}_{z}.feb")
 
-def generate_vtk_path(basepath, i, j, k):
-    return os.path.join(basepath, "jobs", f"Output_WH_{k}_{j}_{i}.vtk")
+def generate_vtk_path(basepath, x, y, z):
+    return os.path.join(basepath,"Simulation_V3", "jobs", f"Output_WH_{x}_{y}_{z}.vtk")
 
 # Example usage:
 basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
-run_simulation(basepath, (0, 11), (0, 6), (0, 6), generate_feb_path, generate_vtk_path)
+run_simulation(basepath, (-2, -1), (-5, 6), (-5, 6), generate_feb_path, generate_vtk_path)
+
+
 
 #%% To extract data we need to apply the "warp by vector" function to our file
-for i in range(0,11):
-    for j in range(6):
-        for k in range(6):
-            for t in range(40):  
-                reader = vtk.vtkUnstructuredGridReader()
-                reader.SetFileName(f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/Output_WH_{k}_{j}_{i}.{t}.vtk")
-                reader.Update()
-                # Create the warp vector filter and set its input
-                warp_vector = vtk.vtkWarpVector()
-                warp_vector.SetInputData(reader.GetOutput())
-    
-                # Update the warp vector filter to apply the warp
-                warp_vector.Update()
-    
-                # Write the warped model to a new VTK file
-                writer = vtk.vtkUnstructuredGridWriter()
-                writer.SetFileName(f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/Output_WH_Warped_{k}_{j}_{i}.{t}.vtk")
-                writer.SetInputData(warp_vector.GetOutput())
-                writer.Write()
-            
-    
-                print(f'Run : Output_WH_{k}_{j}_{i}.{t}.vtk"')
- 
+def warp_vtk(x_range, y_range, z_range, timesteps, input_pattern, output_pattern):
+    for x in x_range:
+        for y in y_range:
+            for z in z_range:
+                for t in timesteps:  
+                    reader = vtk.vtkUnstructuredGridReader()
+                    input_file = input_pattern.format(x=x, y=y, z=z, t=t)
+                    output_file = output_pattern.format(x=x, y=y, z=z, t=t)
+                    reader.SetFileName(input_file)
+                    reader.Update()
+                    # Create the warp vector filter and set its input
+                    warp_vector = vtk.vtkWarpVector()
+                    warp_vector.SetInputData(reader.GetOutput())
+        
+                    # Update the warp vector filter to apply the warp
+                    warp_vector.Update()
+        
+                    # Write the warped model to a new VTK file
+                    writer = vtk.vtkUnstructuredGridWriter()
+                    writer.SetFileName(output_file)
+                    writer.SetInputData(warp_vector.GetOutput())
+                    writer.Write()
+                
+        
+                    print(f'Processed : Output_{x}_{y}_{z}.{t}.vtk')
 
-#%% Extracting result
+#Arguments
+x_values = range(-5, 6)
+y_values = range(-5, 6)
+z_values = range(-2, -1)
+timestep_values = range(40)
+input_pattern = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/Output_WH_{x}_{y}_{z}.{t}.vtk"
+output_pattern = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/Output_WH_Warped_{x}_{y}_{z}.{t}.vtk"
+warp_vtk(x_values, y_values, z_values, timestep_values, input_pattern, output_pattern)
+
+
+
+#%% Extracting slice : script
 import os
 #set the folder where you stock the .vtk file as base path
-basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs"
+basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs"
 
-for i in range(0,11):
-    for j in range(6):
-        for k in range(6):
+for i in range(-2, -1):
+    for j in range(-5, 6):
+        for k in range(-5, 6):
             # Applying the slicer
             path_3D = basepath
-            output_dir1 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_29"
+            output_dir1 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_29"
             input_seg1 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk"
             file3D_pattern = f"Output_WH_Warped_{k}_{j}_{i}.{{t}}.vtk"
             seg_pattern = "rotated_{t}.vtk"
@@ -1010,51 +1087,81 @@ for i in range(0,11):
             step = 40
             vtk2Dslicer(path_3D, input_seg1, output_dir1, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg2 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_30/AO_SINUS_STACK_CINES_30_vtk"
-            output_dir2 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_30"
+            output_dir2 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_30"
             vtk2Dslicer(path_3D, input_seg2, output_dir2, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg3 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_31/AO_SINUS_STACK_CINES_31_vtk"
-            output_dir3 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_31"
+            output_dir3 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_31"
             vtk2Dslicer(path_3D, input_seg3, output_dir3, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg4 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_32/AO_SINUS_STACK_CINES_32_vtk"
-            output_dir4 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_32"
+            output_dir4 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_32"
             vtk2Dslicer(path_3D, input_seg4, output_dir4, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg5 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_33/AO_SINUS_STACK_CINES_33_vtk"
-            output_dir5 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_33"
+            output_dir5 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_33"
             vtk2Dslicer(path_3D, input_seg5, output_dir5, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg6 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk"
-            output_dir6 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_34"
+            output_dir6 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_34"
             vtk2Dslicer(path_3D, input_seg6, output_dir6, file3D_pattern, seg_pattern, output_pattern, step)
             #LVOT segmentations have a different seg pattern because they include 7 key points (surfaces)
             input_seg7 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_vtk"
-            output_dir7 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_LVOT_24"
+            output_dir7 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_LVOT_24"
             seg_pattern_LVOT = "rotated_surface_2_time_{t:02d}.vtk"  ### Don`t use "rotated_surface_1_time_{t:02d}.vtk" as it doesn`t exist for the LVOT_SSFP_CINES_24 segmentation (no junctoin with the aorta arch in this plane)
             vtk2Dslicer(path_3D, input_seg7, output_dir7, file3D_pattern, seg_pattern_LVOT, output_pattern, step)
             input_seg8 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk"
-            output_dir8 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_LVOT_25"
+            output_dir8 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_LVOT_25"
             vtk2Dslicer(path_3D, input_seg8, output_dir8, file3D_pattern, seg_pattern_LVOT, output_pattern, step)
 
 
+#%% Extracting slice : Function version
+###################### Function version
+import os
+def extract_slice(basepath, x_range, y_range, z_range, input_3D_pattern, input_2DMRI_pattern, output_vtk_pattern, timestep, output_dir_path, input_seg_path):
+    for x in range(*x_range):
+        for y in range(*y_range):
+            for z in range(*z_range):
+                path_3D = basepath
+                file3D_pattern = input_3D_pattern.format(x=x, y=y, z=z)
+                # seg_pattern = input_2DMRI_pattern.format(x=x, y=y, z=z, t=t)
+                output_pattern = output_vtk_pattern.format(x=x, y=y, z=z)
+                step = timestep
+                output_dir = output_dir_path
+                input_seg = input_seg_path
+                vtk2Dslicer(path_3D, input_seg, output_dir, file3D_pattern, seg_pattern, output_pattern, step)
+                print(f'Processed : Output_{x}_{y}_{z}.vtk')
+
+basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs"
+x_range = (-5, 6)
+y_range = (-5, 6)
+z_range = (-2, -1)
+file3D_pattern = r"Output_WH_Warped_{x}_{y}_{z}.{{t}}.vtk"
+seg_pattern = r"rotated_{t}.vtk"
+output_pattern = r"transverse_slice_{x}_{y}_{z}.{{t:02d}}.vtk"
+step = 40
+for cine in [29,30, 31, 32, 33, 34]:
+    output_dir = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/test/sliced_CINES_{cine}"
+    input_seg = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+    extract_slice(basepath, x_range, y_range, z_range, file3D_pattern, seg_pattern, output_pattern, step, output_dir, input_seg)
+    
 
 
-#%%
+#%% Calculate distance & save them in Excel
 import os
 import numpy as np
 import pandas as pd
 
-# Assuming shape_center, read_points_vtk, and calculate_distances are defined elsewhere
+# Execute shape_center, read_points_vtk, and calculate_distances
 
 # Initialize a dictionary to store all data
 all_data = []
 
-for i in range(0, 11):
-    for j in range(6):
-        for k in range(6):
+for i in range(-2, -1):
+    for j in range(-5, 6):
+        for k in range(-5, 6):
             for t in range(40):
                 row_data = {'i': i, 'j': j, 'k': k, 't': t}
 
                 for cine in [29, 30, 31, 32, 33, 34]:
                     input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
-                    input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_{cine}"
+                    input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_{cine}"
                     #Extracting center coords from the 2D MRI
                     vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
                     centre_2DMRI = shape_center(vtk_file_2DMRI)
@@ -1079,88 +1186,63 @@ for i in range(0, 11):
 df = pd.DataFrame(all_data)
 
 # Save the DataFrame to an Excel file
-df.to_excel("center_distance_data_V3.xlsx", index=False)
+df.to_excel("center_distance_data_XY_values_testing.xlsx", index=False)
 
-
-# %% Regression multiple
+#%% Calculte the norm of data stocked in an excel file and return a new excel
 import pandas as pd
-import statsmodels.api as sm
-from statsmodels.stats.outliers_influence import variance_inflation_factor
+def calcul_norm_excel(excel_path, columns_name, output_excel=None)
+    # load the excel file
+    file_path = excel_path
+    data = pd.read_excel(file_path)
+    # Specify the columns used
+    distance_columns = columns_name
+    # Calculate the norm for each line
+    data['distance_norm'] = data[distance_columns].apply(lambda row: (row**2).sum()**0.5, axis=1)
+    # Save data in a new excel file
+    output_file_path = output_excel if output_excel else file_path
+    data.to_excel(output_file_path, index=False)
+    print(f"Results have been saved in {output_file_path}")
 
-# Charger les données
-file_path = "C:/Users/jr403s/Internship_JR_Glasgow/code/center_distance_data_V3_test.xlsx"
+
+file_input_path = "center_distance_data_XY_values_testing.xlsx"  # Replace as needed
+output_file_path ="center_distance_data_XY_values_Out_testing.xlsx"  # Replace as needed
+distance_columns = ['distance_CINES_29', 'distance_CINES_30', 'distance_CINES_31', 'distance_CINES_32', 'distance_CINES_33', 'distance_CINES_34']
+calcul_norm_excel(file_input_path, distance_columns, output_file_path)
+#%% plot distance_norm/z (z=i in the dataset)
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+# Load the Excel file
+file_path = "C:/Users/jr403s/Documents/code/center_distance_data_Z_value_testing.xlsx"
 data = pd.read_excel(file_path)
 
-# Filtrer les données pour t = 15
-t_constant_data = data[data['t'] == 15].dropna()
+for j in range(1):
+    for k in range(1):
+        # Filter data for t = 17
+        t_constant_data = data[(data['t'] == 17) & (data['j'] == j) & (data['k'] == k)].copy()
 
-# Définir les variables indépendantes et dépendantes
-X = t_constant_data[['i', 'j', 'k']]
-y = t_constant_data['distance_CINES_29']
+        # Plot the relationship between k and distance_norm
+        fig1 = px.scatter(t_constant_data, x='i', y='distance_norm',
+                        title=f"Relation entre k et la norme des distances à t=17",
+                        labels={'i': 'Valeur de z', 'distance_norm': 'Norme des distances'},
+                        trendline="ols")  # Add linear trendline
 
-# Ajouter une constante pour l'interception
-X = sm.add_constant(X)
-
-# Ajuster le modèle de régression multiple
-model = sm.OLS(y, X).fit()
-
-# Résumé du modèle
-print(model.summary())
-
-# Calculer le VIF pour chaque variable indépendante
-vif_data = pd.DataFrame()
-vif_data["feature"] = X.columns
-vif_data["VIF"] = [variance_inflation_factor(X.values, i) for i in range(len(X.columns))]
-print(vif_data)
-
-# %%
-import pandas as pd
-import numpy as np
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
-
-# access data
-file_path =  "C:/Users/jr403s/Internship_JR_Glasgow/code/center_distance_data_V3_test.xlsx"
-data = pd.read_excel(file_path)
-
-# Filtrer les données pour t = 15 fixe
-t_constant_data = data[data['t'] == 15].dropna()
-
-# Définir les variables indépendantes et dépendantes
-X = t_constant_data[['i', 'j', 'k']]
-y = t_constant_data['distance_CINES_29']
-
-poly = PolynomialFeatures(degree=2)
-X_poly = poly.fit_transform(X)
-
-# Diviser les données en ensembles d'entraînement et de test
-X_train, X_test, y_train, y_test = train_test_split(X_poly, y, test_size=0.2, random_state=42)
-
-# Ajuster le modèle de régression polynomiale
-model = LinearRegression()
-model.fit(X_train, y_train)
-
-# Prédire sur l'ensemble de test
-y_pred = model.predict(X_test)
-
-# Évaluer le modèle
-mse = mean_squared_error(y_test, y_pred)
-r2 = r2_score(y_test, y_pred)
+        # Show the plot
+        print("For x = ", j, " and y = ", k )
+        fig1.show()
 
 
-print("------ Regression polynomiale ------")
-print("Mean Squared Error:", mse)
-print("R-squared:", r2)
-
-# %%
+ #%% Plot distance_CINES_XX/xyz_norm
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.linear_model import LinearRegression
+from scipy import stats as scipy_stats  # Renommer l'import pour éviter le conflit
 
 # Load the Excel file
-file_path = "C:/Users/jr403s/Internship_JR_Glasgow/code/center_distance_data_V3_test.xlsx"
+file_path = "C:/Users/jr403s/Documents/code/center_distance_data_V3.xlsx"
 data = pd.read_excel(file_path)
 
 # Filter data for t = 15
@@ -1169,19 +1251,141 @@ t_constant_data = data[data['t'] == 15].copy()
 # Calculate the norm of the vectors (i, j, k)
 t_constant_data['norm'] = np.sqrt(t_constant_data['i']**2 + t_constant_data['j']**2 + t_constant_data['k']**2)
 
-# Plot the relationship between Norm and distance_CINES_29
-fig1 = px.scatter(t_constant_data, x='norm', y='distance_CINES_29',
-                   title='Relation entre la Norme et la Distance CINES 29',
-                   labels={'norm': 'Norme', 'distance_CINES_29': 'Distance CINES 29'})
+for cine in [29, 30, 31, 32, 33, 34]:
+    # Prepare data for trendline calculation
+    X = t_constant_data[['norm']]
+    y = t_constant_data[f'distance_CINES_{cine}']
 
-# Calculate the number of combinations (i, j, k) for each norm value
-norm_counts = t_constant_data.groupby('norm').size().reset_index(name='count')
+    # Fit linear regression model
+    model = LinearRegression()
+    model.fit(X, y)
+    trendline = model.predict(X)
 
-# Plot the number of combinations for each norm value
-fig2 = px.bar(norm_counts, x='norm', y='count',
-               title='Nombre de combinaisons (i, j, k) par Norme',
-               labels={'norm': 'Norme', 'count': 'Nombre de combinaisons'})
+    # Calculate confidence interval
+    X_with_intercept = np.c_[np.ones(X.shape[0]), X]
+    y_pred = model.predict(X)
+    n = X.shape[0]
+    p = X_with_intercept.shape[1]
+    residuals = y - y_pred
+    residual_std_error = np.sqrt(np.sum(residuals**2) / (n - p))
+    t_value = scipy_stats.t.ppf(0.975, n - p)  
+    se_pred = residual_std_error * np.sqrt(1 + (X_with_intercept @ np.linalg.inv(X_with_intercept.T @ X_with_intercept) @ X_with_intercept.T).diagonal())
+    ci = t_value * se_pred
 
-# Show plots
-fig1.show(), fig2.show()
+    # # Calculate min and max for each norm value
+    # stats_df = t_constant_data.groupby('norm')[f'distance_CINES_{cine}'].agg(['min', 'max']).reset_index()
+
+    # Plot the relationship between Norm and distance_CINES_<cine>
+    fig1 = px.scatter(t_constant_data, x='norm', y=f"distance_CINES_{cine}",
+                     title=f"Relation entre la Norme et la Distance CINES {cine}",
+                     labels={'norm': 'Norme', f"distance_CINES_{cine}": f"Distance CINES {cine}"})
+
+    # Add trendline
+    fig1.add_trace(go.Scatter(x=t_constant_data['norm'], y=trendline, mode='lines', name='Trendline', line=dict(color='red')))
+
+    # Add confidence interval
+    fig1.add_trace(go.Scatter(x=X['norm'], y=y_pred + ci, mode='lines', line=dict(width=0, color='gray'), name='Upper CI'))
+    fig1.add_trace(go.Scatter(x=X['norm'], y=y_pred - ci, mode='lines', line=dict(width=0, color='gray'), fillcolor='rgba(68, 68, 68, 0.3)', fill='tonexty', name='Lower CI'))
+
+    # # Add min and max envelope
+    # fig1.add_trace(go.Scatter(x=stats_df['norm'], y=stats_df['min'], mode='lines', line=dict(color='blue'), name='Min Envelope'))
+    # fig1.add_trace(go.Scatter(x=stats_df['norm'], y=stats_df['max'], mode='lines', line=dict(color='green'), name='Max Envelope'))
+
+    # Plot the number of combinations for each norm value
+    norm_counts = t_constant_data.groupby('norm').size().reset_index(name='count')
+    fig2 = px.bar(norm_counts, x='norm', y='count',
+                  title='Nombre de combinaisons (i, j, k) par Norme',
+                  labels={'norm': 'Norme', 'count': 'Nombre de combinaisons'})
+
+    # Show plots
+    fig1.show()
+    fig2.show()
+
 # %%
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+
+# for cine in [29, 30, 31, 32, 33, 34]:
+# Charger les données depuis le fichier Excel
+file_path = 'center_distance_data_XY_values_testing.xlsx'
+data = pd.read_excel(file_path)
+
+# Filtrer les données pour t = 17
+t_fixed_data = data[data['t'] == 17].copy()
+
+# Extraire les colonnes nécessaires
+k_values = t_fixed_data['k']
+j_values = t_fixed_data['j']
+distance_values = t_fixed_data[f'distance_norm']
+# distance_values = t_fixed_data[f'distance_CINES_{cine}']
+
+# Créer une grille pour k et j
+k_grid = np.linspace(min(k_values), max(k_values), 100)
+j_grid = np.linspace(min(j_values), max(j_values), 100)
+K, J = np.meshgrid(k_grid, j_grid)
+
+# Interpoler les valeurs de distance_CINES_29 sur la grille
+distance_grid = griddata((k_values, j_values), distance_values, (K, J), method='cubic')
+
+# Créer le graphe de contour
+plt.figure(figsize=(10, 8))
+contour = plt.contourf(K, J, distance_grid, levels=20, cmap='copper')
+plt.colorbar(contour, label=f'Distance CINES Norm')
+# plt.colorbar(contour, label=f'Distance CINES {cine}')
+
+# Ajouter des labels et un titre
+plt.xlabel('k')
+plt.ylabel('j')
+plt.title(f'Contour plot of distance_CINES_norm = f(k, j) at t=17')
+# plt.title(f'Contour plot of distance_CINES_{cine} = f(k, j) at t=17')
+
+# Afficher le graphe
+plt.show()
+
+
+#%% LVOT : Calculate height & save them in Excel
+# import os
+# import numpy as np
+# import pandas as pd
+
+# # Execute shape_center, read_points_vtk, and calculate_distances
+
+# # Initialize a dictionary to store all data
+# all_data = []
+
+# for i in range(-2, -1):
+#     for j in range(-5, 6):
+#         for k in range(-5, 6):
+#             for t in range(40):
+#                 row_data = {'i': i, 'j': j, 'k': k, 't': t}
+
+#                 for cine in [29, 30, 31, 32, 33, 34]:
+#                     input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+#                     input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_{cine}"
+#                     #Extracting center coords from the 2D MRI
+#                     vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
+#                     centre_2DMRI = shape_center(vtk_file_2DMRI)
+#                     # print(vtk_file_2DMRI)
+#                     #Extracting center coords from the slice from the 3D model
+#                     vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
+#                     centre_3Dslice = shape_center(vtk_file_3Dslice)
+#                     print(vtk_file_3Dslice)
+
+#                     points_2DMRI = read_points_vtk(vtk_file_2DMRI)
+#                     points_3Dslice = read_points_vtk(vtk_file_3Dslice)
+                
+#                     distance = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
+#                     print(distance)
+
+#                     row_data[f'distance_CINES_{cine}'] = distance
+                    
+#                 all_data.append(row_data)
+
+
+# # Create a DataFrame from the list of data
+# df = pd.DataFrame(all_data)
+
+# # Save the DataFrame to an Excel file
+# df.to_excel("center_distance_data_XY_values_testing.xlsx", index=False)
