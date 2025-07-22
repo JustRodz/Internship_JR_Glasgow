@@ -583,3 +583,175 @@ print("Distances entre les points 2 et 3 :", distances_bottom)
 print("Distances entre les points 4 et 5 :", distances_mid)
 print("Distances entre les points 6 et 7 :", distances_top)
 
+ #%% Plot distance_CINES_XX/xyz_norm
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.linear_model import LinearRegression
+from scipy import stats as scipy_stats  # Renommer l'import pour éviter le conflit
+
+# Load the Excel file
+file_path = "C:/Users/jr403s/Documents/code/center_distance_data_V3.xlsx"
+data = pd.read_excel(file_path)
+
+# Filter data for t = 15
+t_constant_data = data[data['t'] == 17].copy()
+
+# Calculate the norm of the vectors (i, j, k)
+t_constant_data['norm'] = np.sqrt(t_constant_data['i']**2 + t_constant_data['j']**2 + t_constant_data['k']**2)
+
+for cine in [29, 30, 31, 32, 33, 34]:
+    # Prepare data for trendline calculation
+    X = t_constant_data[['norm']]
+    y = t_constant_data[f'distance_CINES_{cine}']
+
+    # Fit linear regression model
+    model = LinearRegression()
+    model.fit(X, y)
+    trendline = model.predict(X)
+
+    # Calculate confidence interval
+    X_with_intercept = np.c_[np.ones(X.shape[0]), X]
+    y_pred = model.predict(X)
+    n = X.shape[0]
+    p = X_with_intercept.shape[1]
+    residuals = y - y_pred
+    residual_std_error = np.sqrt(np.sum(residuals**2) / (n - p))
+    t_value = scipy_stats.t.ppf(0.975, n - p)  
+    se_pred = residual_std_error * np.sqrt(1 + (X_with_intercept @ np.linalg.inv(X_with_intercept.T @ X_with_intercept) @ X_with_intercept.T).diagonal())
+    ci = t_value * se_pred
+
+    # # Calculate min and max for each norm value
+    # stats_df = t_constant_data.groupby('norm')[f'distance_CINES_{cine}'].agg(['min', 'max']).reset_index()
+
+    # Plot the relationship between Norm and distance_CINES_<cine>
+    fig1 = px.scatter(t_constant_data, x='norm', y=f"distance_CINES_{cine}",
+                     title=f"Relation entre la Norme et la Distance CINES {cine}",
+                     labels={'norm': 'Norme', f"distance_CINES_{cine}": f"Distance CINES {cine}"})
+
+    # Add trendline
+    fig1.add_trace(go.Scatter(x=t_constant_data['norm'], y=trendline, mode='lines', name='Trendline', line=dict(color='red')))
+
+    # Add confidence interval
+    fig1.add_trace(go.Scatter(x=X['norm'], y=y_pred + ci, mode='lines', line=dict(width=0, color='gray'), name='Upper CI'))
+    fig1.add_trace(go.Scatter(x=X['norm'], y=y_pred - ci, mode='lines', line=dict(width=0, color='gray'), fillcolor='rgba(68, 68, 68, 0.3)', fill='tonexty', name='Lower CI'))
+
+    # # Add min and max envelope
+    # fig1.add_trace(go.Scatter(x=stats_df['norm'], y=stats_df['min'], mode='lines', line=dict(color='blue'), name='Min Envelope'))
+    # fig1.add_trace(go.Scatter(x=stats_df['norm'], y=stats_df['max'], mode='lines', line=dict(color='green'), name='Max Envelope'))
+
+    # Plot the number of combinations for each norm value
+    norm_counts = t_constant_data.groupby('norm').size().reset_index(name='count')
+    fig2 = px.bar(norm_counts, x='norm', y='count',
+                  title='Nombre de combinaisons (i, j, k) par Norme',
+                  labels={'norm': 'Norme', 'count': 'Nombre de combinaisons'})
+
+    # Show plots
+    fig1.show()
+    fig2.show()
+
+# %% Contour graph for XY
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+
+# for cine in [29, 30, 31, 32, 33, 34]:
+# Charger les données depuis le fichier Excel
+file_path = 'center_distance_data_XY_values_testing.xlsx'
+data = pd.read_excel(file_path)
+
+# Filtrer les données pour t = 17
+fixed_data = data[data['t'] == 17].copy()
+
+# Extraire les colonnes nécessaires
+k_values = fixed_data['k']
+j_values = fixed_data['j']
+distance_values = fixed_data[f'distance_norm']
+# distance_values = fixed_data[f'distance_CINES_{cine}']
+
+# Créer une grille pour k et j
+k_grid = np.linspace(min(k_values), max(k_values), 100)
+j_grid = np.linspace(min(j_values), max(j_values), 100)
+K, J = np.meshgrid(k_grid, j_grid)
+
+# Interpoler les valeurs de distance_CINES_29 sur la grille
+distance_grid = griddata((k_values, j_values), distance_values, (K, J), method='cubic')
+
+# Créer le graphe de contour
+plt.figure(figsize=(10, 8))
+contour = plt.contourf(K, J, distance_grid, levels=20, cmap='copper')
+plt.colorbar(contour, label=f'Distance CINES Norm')
+# plt.colorbar(contour, label=f'Distance CINES {cine}')
+
+# Ajouter des labels et un titre
+plt.xlabel('k')
+plt.ylabel('j')
+plt.title(f'Contour plot of distance_CINES_norm = f(k, j) at t=17')
+# plt.title(f'Contour plot of distance_CINES_{cine} = f(k, j) at t=17')
+
+# Afficher le graphe
+plt.show()
+
+#%% Test Least square
+import numpy as np
+from scipy.optimize import least_squares, minimize
+import matplotlib.pyplot as plt
+
+
+# Définir le fichier Excel en amont
+file_path = 'center_distance_data_Z_values_systole_diastole.xlsx'
+
+# Charger les données depuis le fichier Excel
+data = pd.read_excel(file_path)
+
+# Filtrer les données pour t fixe
+t = 17
+fixed_data = data[data['t'] == t].copy()
+
+# Extraire les colonnes z et distance_norm_V2
+z = fixed_data['z'].values
+distance_norm_V2 = fixed_data['distance_norm_V2'].values
+
+# Fonction de résidu pour un modèle linéaire
+def residuals(params, z, distance_norm_V2):
+    a, b, c = params
+    return distance_norm_V2 - (a * (z**2) + b*z + c)
+
+# Paramètres initiaux pour le modèle linéaire
+initial_params = [1.0, 1.0, 1.0]
+
+# Optimisation des moindres carrés
+result = least_squares(residuals, initial_params, args=(z, distance_norm_V2))
+
+# Paramètres optimaux
+print(f"For t = {t}")
+a_opt, b_opt, c_opt = result.x
+print(f"optimal parameters: a = {a_opt}, b = {b_opt}, c = {c_opt}")
+
+# Fonction quadratique ajustée
+def quadratic_model(z, a, b, c):
+    return a * (z**2) + b * z + c
+
+
+# Trouver le minimum de la fonction ajustée
+result_min = minimize(quadratic_model, x0=0, args=(a_opt, b_opt, c_opt))
+
+# Minimum du modèle
+z_min = result_min.x[0]
+distance_min = result_min.fun
+print(f"Minimum du modèle à z = {z_min}: distance_norm_V2 = {distance_min}")
+
+
+# Tracer les données et le modèle ajusté
+plt.scatter(z, distance_norm_V2, label='Data')
+z_fit = np.linspace(min(z), max(z), 100)
+distance_fit = quadratic_model(z_fit, a_opt, b_opt, c_opt)
+plt.plot(z_fit, distance_fit, label='Fitted model', color='red')
+plt.scatter(z_min, distance_min, color='green', label=f'Minimum: ({z_min:.2f}, {distance_min:.2f})')
+plt.xlabel('z')
+plt.ylabel('distance_norm_V2')
+plt.title(f'Model fitted for t = {t}')
+plt.legend()
+plt.show()

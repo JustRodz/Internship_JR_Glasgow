@@ -1059,12 +1059,12 @@ def warp_vtk(x_range, y_range, z_range, timesteps, input_pattern, output_pattern
                     print(f'Processed : Output_{x}_{y}_{z}.{t}.vtk')
 
 #Arguments
-x_values = range(-5, 6)
-y_values = range(-5, 6)
-z_values = range(-2, -1)
+x_values = range(0, 1)
+y_values = range(0, 1)
+z_values = range(-10, 11)
 timestep_values = range(40)
-input_pattern = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/Output_WH_{x}_{y}_{z}.{t}.vtk"
-output_pattern = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/Output_WH_Warped_{x}_{y}_{z}.{t}.vtk"
+input_pattern = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/Output_WH_{x}_{y}_{z}.{t}.vtk"
+output_pattern = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/Output_WH_Warped_{x}_{y}_{z}.{t}.vtk"
 warp_vtk(x_values, y_values, z_values, timestep_values, input_pattern, output_pattern)
 
 
@@ -1072,14 +1072,14 @@ warp_vtk(x_values, y_values, z_values, timestep_values, input_pattern, output_pa
 #%% Extracting slice : script
 import os
 #set the folder where you stock the .vtk file as base path
-basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs"
+basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
 
 for i in range(-2, -1):
     for j in range(-5, 6):
         for k in range(-5, 6):
             # Applying the slicer
             path_3D = basepath
-            output_dir1 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_29"
+            output_dir1 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_29"
             input_seg1 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_29/AO_SINUS_STACK_CINES_29_vtk"
             file3D_pattern = f"Output_WH_Warped_{k}_{j}_{i}.{{t}}.vtk"
             seg_pattern = "rotated_{t}.vtk"
@@ -1087,27 +1087,27 @@ for i in range(-2, -1):
             step = 40
             vtk2Dslicer(path_3D, input_seg1, output_dir1, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg2 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_30/AO_SINUS_STACK_CINES_30_vtk"
-            output_dir2 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_30"
+            output_dir2 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_30"
             vtk2Dslicer(path_3D, input_seg2, output_dir2, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg3 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_31/AO_SINUS_STACK_CINES_31_vtk"
-            output_dir3 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_31"
+            output_dir3 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_31"
             vtk2Dslicer(path_3D, input_seg3, output_dir3, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg4 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_32/AO_SINUS_STACK_CINES_32_vtk"
-            output_dir4 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_32"
+            output_dir4 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_32"
             vtk2Dslicer(path_3D, input_seg4, output_dir4, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg5 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_33/AO_SINUS_STACK_CINES_33_vtk"
-            output_dir5 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_33"
+            output_dir5 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_33"
             vtk2Dslicer(path_3D, input_seg5, output_dir5, file3D_pattern, seg_pattern, output_pattern, step)
             input_seg6 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_34/AO_SINUS_STACK_CINES_34_vtk"
-            output_dir6 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_34"
+            output_dir6 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_34"
             vtk2Dslicer(path_3D, input_seg6, output_dir6, file3D_pattern, seg_pattern, output_pattern, step)
             #LVOT segmentations have a different seg pattern because they include 7 key points (surfaces)
-            input_seg7 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24.nii/LVOT_SSFP_CINE_24_vtk"
-            output_dir7 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_LVOT_24"
+            input_seg7 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_24/LVOT_SSFP_CINE_24_vtk"
+            output_dir7 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_LVOT_24"
             seg_pattern_LVOT = "rotated_surface_2_time_{t:02d}.vtk"  ### Don`t use "rotated_surface_1_time_{t:02d}.vtk" as it doesn`t exist for the LVOT_SSFP_CINES_24 segmentation (no junctoin with the aorta arch in this plane)
             vtk2Dslicer(path_3D, input_seg7, output_dir7, file3D_pattern, seg_pattern_LVOT, output_pattern, step)
-            input_seg8 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25.nii/LVOT_SSFP_CINE_25_vtk"
-            output_dir8 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_LVOT_25"
+            input_seg8 = r"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25/LVOT_SSFP_CINE_25_vtk"
+            output_dir8 = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_LVOT_25"
             vtk2Dslicer(path_3D, input_seg8, output_dir8, file3D_pattern, seg_pattern_LVOT, output_pattern, step)
 
 
@@ -1128,22 +1128,349 @@ def extract_slice(basepath, x_range, y_range, z_range, input_3D_pattern, input_2
                 vtk2Dslicer(path_3D, input_seg, output_dir, file3D_pattern, seg_pattern, output_pattern, step)
                 print(f'Processed : Output_{x}_{y}_{z}.vtk')
 
-basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs"
-x_range = (-5, 6)
-y_range = (-5, 6)
-z_range = (-2, -1)
+# Horizontal segmentation
+# basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
+# x_range = (0, 1)
+# y_range = (0, 1)
+# z_range = (-10, 11)
+# file3D_pattern = r"Output_WH_Warped_{x}_{y}_{z}.{{t}}.vtk"
+# seg_pattern = r"rotated_{t}.vtk"
+# output_pattern = r"transverse_slice_{x}_{y}_{z}.{{t:02d}}.vtk"
+# step = 40
+# for cine in [29,30, 31, 32, 33, 34]:
+#     output_dir = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_{cine}"
+#     input_seg = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+#     extract_slice(basepath, x_range, y_range, z_range, file3D_pattern, seg_pattern, output_pattern, step, output_dir, input_seg)
+
+# LVOT Segmentation
+basepath = r"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
+x_range = (0, 1)
+y_range = (0, 1)
+z_range = (-10, 11)
 file3D_pattern = r"Output_WH_Warped_{x}_{y}_{z}.{{t}}.vtk"
-seg_pattern = r"rotated_{t}.vtk"
+seg_pattern = r"rotated_surface_2_time_{t:02d}.vtk"     #Use surface_2 because surface_1 is void for LVOT_SSFP_CINES_24
 output_pattern = r"transverse_slice_{x}_{y}_{z}.{{t:02d}}.vtk"
 step = 40
-for cine in [29,30, 31, 32, 33, 34]:
-    output_dir = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/test/sliced_CINES_{cine}"
-    input_seg = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+for cine in [24, 25]:
+    output_dir = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_LVOT_{cine}"
+    input_seg = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_{cine}/LVOT_SSFP_CINE_{cine}_vtk"
     extract_slice(basepath, x_range, y_range, z_range, file3D_pattern, seg_pattern, output_pattern, step, output_dir, input_seg)
-    
 
+#############################################################################################################################################################################
+
+#%% test calcul height
+height = []
+for t in range(40):
+    basepath = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25/LVOT_SSFP_CINE_25_vtk"  
+    vtk_file_top_point = os.path.join(basepath, f"rotated_surface_1_time_{t:02d}.vtk")
+    # print(vtk_file_top_point)
+    top_point = shape_center(vtk_file_top_point)
+    vtk_file_bottom_point = os.path.join(basepath, f"rotated_surface_2_time_{t:02d}.vtk")
+    # print(vtk_file_bottom_point)
+    bottom_point = shape_center(vtk_file_bottom_point)
+    height_t = calculate_distances_abs(top_point, bottom_point)
+    height.append(height_t)
+    
+    # print(bottom_point)
+    # print("for t = ", t, ", the height = ", Height)
+print(height)
+print(min(height))
+print(max(height))
+###########################################################################################################################################################################
 
 #%% Calculate distance & save them in Excel
+import os
+import numpy as np
+import pandas as pd
+
+# Execute shape_center, read_points_vtk, and calculate_distances
+
+# Initialize a dictionary to store all data
+all_data = []
+
+for i in range(-10, 11):
+    for j in range(0, 1):
+        for k in range(0, 1):
+            for t in range(40):
+                row_data = {'i': i, 'j': j, 'k': k, 't': t}
+
+                for cine in [29, 30, 31, 32, 33, 34]:
+                    input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+                    input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_{cine}"
+                    #Extracting center coords from the 2D MRI
+                    vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
+                    centre_2DMRI = shape_center(vtk_file_2DMRI)
+                    # print(vtk_file_2DMRI)
+                    #Extracting center coords from the slice from the 3D model
+                    vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
+                    centre_3Dslice = shape_center(vtk_file_3Dslice)
+                    print(vtk_file_3Dslice)
+
+                    points_2DMRI = read_points_vtk(vtk_file_2DMRI)
+                    points_3Dslice = read_points_vtk(vtk_file_3Dslice)
+                
+                    distance = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
+                    print(distance)
+
+                    row_data[f'distance_CINES_{cine}'] = distance
+                    
+                all_data.append(row_data)
+
+
+# Create a DataFrame from the list of data
+df = pd.DataFrame(all_data)
+
+# Save the DataFrame to an Excel file
+df.to_excel("center_distance_data_XY_values_testing.xlsx", index=False)
+###################################################################################################################
+
+#%% Calculate distance at diastole and systole modified version of the script above
+import os
+import numpy as np
+import pandas as pd
+
+# Execute shape_center, read_points_vtk, and calculate_distances
+
+# Initialize a dictionary to store all data
+all_data = []
+
+for x in range(0, 1):
+    for y in range(0, 1):
+        for z in range(-10, 11):
+            for t in [0, 1, 17]:
+                row_data = {'x': x, 'y': y, 'z': z, 't': t}
+                t_model = 39 if t == 17 else t
+                for cine in [29, 30, 31, 32, 33, 34]:
+                    input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+                    input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_{cine}"
+                    #Extracting center coords from the 2D MRI
+                    vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
+                    centre_2DMRI = shape_center(vtk_file_2DMRI)
+                    # print(vtk_file_2DMRI)
+                    #Extracting center coords from the slice from the 3D model
+                    vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{x}_{y}_{z}.{t_model:02d}.vtk")
+                    centre_3Dslice = shape_center(vtk_file_3Dslice)
+                    print(vtk_file_3Dslice)
+
+                    points_2DMRI = read_points_vtk(vtk_file_2DMRI)
+                    points_3Dslice = read_points_vtk(vtk_file_3Dslice)
+                
+                    distance = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
+                    print(distance)
+
+                    row_data[f'distance_CINES_{cine}'] = distance
+                    
+                all_data.append(row_data)
+
+
+# Create a DataFrame from the list of data
+df = pd.DataFrame(all_data)
+
+# Save the DataFrame to an Excel file
+df.to_excel("center_distance_data_Z_values_systole_diastole.xlsx", index=False)
+#####################################################################################################################################################
+
+#%% Calculte the norm of data stocked in an excel file and return a new excel
+import pandas as pd
+def calcul_norm_excel(excel_path, columns_name, output_excel=None):
+    # load the excel file
+    file_path = excel_path
+    data = pd.read_excel(file_path)
+    # Specify the columns used
+    distance_columns = columns_name
+    # Calculate the norm for each line
+    data['distance_norm'] = data[distance_columns].apply(lambda row: (row**2).sum()**0.5, axis=1)
+    # Save data in a new excel file
+    output_file_path = output_excel if output_excel else file_path
+    data.to_excel(output_file_path, index=False)
+    print(f"Results have been saved in {output_file_path}")
+
+
+file_input_path = "center_distance_data_Z_values_systole_diastole.xlsx"  # Replace as needed
+# output_file_path ="center_distance_data_XY_values_Out_testing.xlsx"  # Replace as needed
+distance_columns = ['distance_CINES_30', 'distance_CINES_31', 'distance_CINES_32', 'distance_CINES_33', 'distance_CINES_34']
+
+calcul_norm_excel(file_input_path, distance_columns)
+############################################################################################################################################################
+#%% plot distance_norm/z (z=i in the dataset)
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+
+# Load the Excel file
+file_path = "C:/Users/jr403s/Documents/code/center_distance_data_Z_values_systole_diastole.xlsx"
+data = pd.read_excel(file_path)
+
+for x in range(1):
+    for y in range(1):
+        # Filter data for t=1 (diastole) or t = 17 (systole)
+        t_constant_data = data[(data['t'] == 17) & (data['x'] == x) & (data['y'] == y)].copy()
+
+        # Plot the relationship between k and distance_norm
+        fig1 = px.scatter(t_constant_data, x='z', y='distance_norm_V2',
+                        title=f"Relation between z and the norm of the distances at t=17 (systole)",
+                        labels={'z': 'z values', 'distance_norm_V2': 'Norm of the distances'})  
+
+        # Show the plot
+        print("For x = ", x, " and y = ", y )
+        fig1.show()
+
+#################################################################################################################
+
+#%% function for least square fitting and finding the minimum
+import pandas as pd
+import numpy as np
+from scipy.optimize import least_squares, minimize
+import matplotlib.pyplot as plt
+
+def fit_model_and_find_minimum(t, file_path, first_col, second_col, model_func, initial_params, fixed_col=None):
+    """
+    Fit a model to data and find the minimum of the fitted model.
+
+    Parameters:
+    - t: The fixed value of t to filter the data.
+    - file_path: Path to the Excel file.
+    - first_col: Name of the column containing first values (z here) which serves for the X-axis.
+    - second_col: Name of the column containing the second values (distance here) which serves for the Y-axis .
+    - fixed_col: Name of the column containing the fixed value (t here).
+    - model_func: The model function to fit.
+    - initial_params: Initial parameters for the model.
+
+    Returns:
+    - A tuple containing optimal parameters, minimum value information, and the plot.
+    """
+    # Load data from the Excel file
+    data = pd.read_excel(file_path)
+
+    # Filter data for the fixed value of t if fixed_col is provided
+    if fixed_col is not None:
+        fixed_data = data[data[fixed_col] == t].copy()
+    else:
+        fixed_data = data.copy()
+
+    # Extract columns z and distance
+    z = fixed_data[first_col].values
+    distance = fixed_data[second_col].values
+
+    # Residual function for the model
+    def residuals(params, z, distance):
+        return distance - model_func(z, *params)
+
+    # Least squares optimization
+    result = least_squares(residuals, initial_params, args=(z, distance))
+
+    # Optimal parameters
+    optimal_params = result.x
+    print(f"For t = {t}")
+    print(f"Optimal parameters: {optimal_params}")
+
+    # Find the minimum of the fitted model
+    result_min = minimize(lambda z: model_func(z, *optimal_params), x0=0)
+
+    # Minimum of the model
+    z_min = result_min.x[0]
+    distance_min = result_min.fun
+    print(f"Minimum of the model at z = {z_min}: distance = {distance_min}")
+
+    # Plot the data and the fitted model
+    plt.scatter(z, distance, label='Data')
+    z_fit = np.linspace(min(z), max(z), 100)
+    distance_fit = model_func(z_fit, *optimal_params)
+    plt.plot(z_fit, distance_fit, label='Fitted model', color='red')
+    plt.scatter(z_min, distance_min, color='green', label=f'Minimum: ({z_min:.2f}, {distance_min:.2f})')
+    plt.xlabel(first_col)
+    plt.ylabel(second_col)
+    plt.title(f'Model fitted for t = {t}')
+    plt.legend()
+    plt.show()
+
+    return optimal_params, (z_min, distance_min), plt
+
+# test
+t = 17
+file_path = 'center_distance_data_Z_values_systole_diastole.xlsx'
+first_col = 'z'
+second_col = 'distance_norm_V2'
+fixed_col = 't'
+model_func = lambda z, a, b, c: a * (z**2) + b * z + c
+initial_params = [1.0, 1.0, 1.0]
+
+optimal_params, min_info, plot = fit_model_and_find_minimum(t, file_path, first_col, second_col, model_func, initial_params, fixed_col)
+
+####################################################################################################################################################
+
+#%% function plotting the contour graph
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+
+def plot_contour_and_find_min(file_path, t_value, X_col, Y_col, distance_col):
+    """
+    Plot a contour graph and find the minimum distance value.
+
+    Parameters:
+    - file_path: Path to the Excel file.
+    - t_value: The fixed value of t to filter the data.
+    - X_col: Name of the column containing X values.
+    - Y_col: Name of the column containing Y values.
+    - distance_col: Name of the column containing distance values.
+    """
+    # Load data from the Excel file
+    data = pd.read_excel(file_path)
+
+    # Filter data for t = t_value
+    fixed_data = data[data['t'] == t_value].copy()
+
+    # Extract necessary columns
+    x_values = fixed_data[X_col]
+    y_values = fixed_data[Y_col]
+    distance_values = fixed_data[distance_col]
+
+    # Create a grid for x and y
+    x_grid = np.linspace(min(x_values), max(x_values), 100)
+    y_grid = np.linspace(min(y_values), max(y_values), 100)
+    X, Y = np.meshgrid(x_grid, y_grid)
+
+    # Interpolate distance values onto the grid
+    distance_grid = griddata((x_values, y_values), distance_values, (X, Y), method='cubic')
+
+    # Find the minimum interpolated distance value
+    min_distance = np.min(distance_grid)
+    min_index = np.unravel_index(np.argmin(distance_grid), distance_grid.shape)
+    min_x, min_y = X[min_index], Y[min_index]
+
+    # Create the contour plot
+    plt.figure(figsize=(10, 8))
+    contour = plt.contourf(X, Y, distance_grid, levels=20, cmap='copper')
+    plt.colorbar(contour, label=distance_col)
+
+    # Add labels and a title
+    plt.xlabel('x')
+    plt.ylabel('y')
+    plt.title(f'Contour plot of {distance_col} = f(x, y) at t={t_value}')
+
+    # Display the point of minimum distance
+    plt.scatter(min_x, min_y, color='red', label=f'Minimum: ({min_x:.2f}, {min_y:.2f}) = {min_distance:.2f}')
+    plt.legend()
+
+    # Show the plot
+    plt.show()
+
+    # Return the minimum distance value and its coordinates
+    return min_distance, (min_x, min_y)
+
+# Example usage of the function
+file_path = 'center_distance_data_XY_values_testing.xlsx'
+t_value = 17
+distance_col = 'distance_norm'
+X_col = 'k'
+Y_col = 'j'
+min_distance, min_coords = plot_contour_and_find_min(file_path, t_value, X_col, Y_col, distance_col)
+print(f"Minimum distance value: {min_distance:.3f} at coordinates (x, y) = ({min_coords[0]:.3f}, {min_coords[1]:.3f})")
+
+####################################################################################################################################################################
+#%% LVOT : Calculate height & save them in Excel
 import os
 import numpy as np
 import pandas as pd
@@ -1188,204 +1515,7 @@ df = pd.DataFrame(all_data)
 # Save the DataFrame to an Excel file
 df.to_excel("center_distance_data_XY_values_testing.xlsx", index=False)
 
-#%% Calculte the norm of data stocked in an excel file and return a new excel
-import pandas as pd
-def calcul_norm_excel(excel_path, columns_name, output_excel=None)
-    # load the excel file
-    file_path = excel_path
-    data = pd.read_excel(file_path)
-    # Specify the columns used
-    distance_columns = columns_name
-    # Calculate the norm for each line
-    data['distance_norm'] = data[distance_columns].apply(lambda row: (row**2).sum()**0.5, axis=1)
-    # Save data in a new excel file
-    output_file_path = output_excel if output_excel else file_path
-    data.to_excel(output_file_path, index=False)
-    print(f"Results have been saved in {output_file_path}")
 
 
-file_input_path = "center_distance_data_XY_values_testing.xlsx"  # Replace as needed
-output_file_path ="center_distance_data_XY_values_Out_testing.xlsx"  # Replace as needed
-distance_columns = ['distance_CINES_29', 'distance_CINES_30', 'distance_CINES_31', 'distance_CINES_32', 'distance_CINES_33', 'distance_CINES_34']
-calcul_norm_excel(file_input_path, distance_columns, output_file_path)
-#%% plot distance_norm/z (z=i in the dataset)
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-
-# Load the Excel file
-file_path = "C:/Users/jr403s/Documents/code/center_distance_data_Z_value_testing.xlsx"
-data = pd.read_excel(file_path)
-
-for j in range(1):
-    for k in range(1):
-        # Filter data for t = 17
-        t_constant_data = data[(data['t'] == 17) & (data['j'] == j) & (data['k'] == k)].copy()
-
-        # Plot the relationship between k and distance_norm
-        fig1 = px.scatter(t_constant_data, x='i', y='distance_norm',
-                        title=f"Relation entre k et la norme des distances à t=17",
-                        labels={'i': 'Valeur de z', 'distance_norm': 'Norme des distances'},
-                        trendline="ols")  # Add linear trendline
-
-        # Show the plot
-        print("For x = ", j, " and y = ", k )
-        fig1.show()
 
 
- #%% Plot distance_CINES_XX/xyz_norm
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from sklearn.linear_model import LinearRegression
-from scipy import stats as scipy_stats  # Renommer l'import pour éviter le conflit
-
-# Load the Excel file
-file_path = "C:/Users/jr403s/Documents/code/center_distance_data_V3.xlsx"
-data = pd.read_excel(file_path)
-
-# Filter data for t = 15
-t_constant_data = data[data['t'] == 15].copy()
-
-# Calculate the norm of the vectors (i, j, k)
-t_constant_data['norm'] = np.sqrt(t_constant_data['i']**2 + t_constant_data['j']**2 + t_constant_data['k']**2)
-
-for cine in [29, 30, 31, 32, 33, 34]:
-    # Prepare data for trendline calculation
-    X = t_constant_data[['norm']]
-    y = t_constant_data[f'distance_CINES_{cine}']
-
-    # Fit linear regression model
-    model = LinearRegression()
-    model.fit(X, y)
-    trendline = model.predict(X)
-
-    # Calculate confidence interval
-    X_with_intercept = np.c_[np.ones(X.shape[0]), X]
-    y_pred = model.predict(X)
-    n = X.shape[0]
-    p = X_with_intercept.shape[1]
-    residuals = y - y_pred
-    residual_std_error = np.sqrt(np.sum(residuals**2) / (n - p))
-    t_value = scipy_stats.t.ppf(0.975, n - p)  
-    se_pred = residual_std_error * np.sqrt(1 + (X_with_intercept @ np.linalg.inv(X_with_intercept.T @ X_with_intercept) @ X_with_intercept.T).diagonal())
-    ci = t_value * se_pred
-
-    # # Calculate min and max for each norm value
-    # stats_df = t_constant_data.groupby('norm')[f'distance_CINES_{cine}'].agg(['min', 'max']).reset_index()
-
-    # Plot the relationship between Norm and distance_CINES_<cine>
-    fig1 = px.scatter(t_constant_data, x='norm', y=f"distance_CINES_{cine}",
-                     title=f"Relation entre la Norme et la Distance CINES {cine}",
-                     labels={'norm': 'Norme', f"distance_CINES_{cine}": f"Distance CINES {cine}"})
-
-    # Add trendline
-    fig1.add_trace(go.Scatter(x=t_constant_data['norm'], y=trendline, mode='lines', name='Trendline', line=dict(color='red')))
-
-    # Add confidence interval
-    fig1.add_trace(go.Scatter(x=X['norm'], y=y_pred + ci, mode='lines', line=dict(width=0, color='gray'), name='Upper CI'))
-    fig1.add_trace(go.Scatter(x=X['norm'], y=y_pred - ci, mode='lines', line=dict(width=0, color='gray'), fillcolor='rgba(68, 68, 68, 0.3)', fill='tonexty', name='Lower CI'))
-
-    # # Add min and max envelope
-    # fig1.add_trace(go.Scatter(x=stats_df['norm'], y=stats_df['min'], mode='lines', line=dict(color='blue'), name='Min Envelope'))
-    # fig1.add_trace(go.Scatter(x=stats_df['norm'], y=stats_df['max'], mode='lines', line=dict(color='green'), name='Max Envelope'))
-
-    # Plot the number of combinations for each norm value
-    norm_counts = t_constant_data.groupby('norm').size().reset_index(name='count')
-    fig2 = px.bar(norm_counts, x='norm', y='count',
-                  title='Nombre de combinaisons (i, j, k) par Norme',
-                  labels={'norm': 'Norme', 'count': 'Nombre de combinaisons'})
-
-    # Show plots
-    fig1.show()
-    fig2.show()
-
-# %%
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.interpolate import griddata
-
-# for cine in [29, 30, 31, 32, 33, 34]:
-# Charger les données depuis le fichier Excel
-file_path = 'center_distance_data_XY_values_testing.xlsx'
-data = pd.read_excel(file_path)
-
-# Filtrer les données pour t = 17
-t_fixed_data = data[data['t'] == 17].copy()
-
-# Extraire les colonnes nécessaires
-k_values = t_fixed_data['k']
-j_values = t_fixed_data['j']
-distance_values = t_fixed_data[f'distance_norm']
-# distance_values = t_fixed_data[f'distance_CINES_{cine}']
-
-# Créer une grille pour k et j
-k_grid = np.linspace(min(k_values), max(k_values), 100)
-j_grid = np.linspace(min(j_values), max(j_values), 100)
-K, J = np.meshgrid(k_grid, j_grid)
-
-# Interpoler les valeurs de distance_CINES_29 sur la grille
-distance_grid = griddata((k_values, j_values), distance_values, (K, J), method='cubic')
-
-# Créer le graphe de contour
-plt.figure(figsize=(10, 8))
-contour = plt.contourf(K, J, distance_grid, levels=20, cmap='copper')
-plt.colorbar(contour, label=f'Distance CINES Norm')
-# plt.colorbar(contour, label=f'Distance CINES {cine}')
-
-# Ajouter des labels et un titre
-plt.xlabel('k')
-plt.ylabel('j')
-plt.title(f'Contour plot of distance_CINES_norm = f(k, j) at t=17')
-# plt.title(f'Contour plot of distance_CINES_{cine} = f(k, j) at t=17')
-
-# Afficher le graphe
-plt.show()
-
-
-#%% LVOT : Calculate height & save them in Excel
-# import os
-# import numpy as np
-# import pandas as pd
-
-# # Execute shape_center, read_points_vtk, and calculate_distances
-
-# # Initialize a dictionary to store all data
-# all_data = []
-
-# for i in range(-2, -1):
-#     for j in range(-5, 6):
-#         for k in range(-5, 6):
-#             for t in range(40):
-#                 row_data = {'i': i, 'j': j, 'k': k, 't': t}
-
-#                 for cine in [29, 30, 31, 32, 33, 34]:
-#                     input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
-#                     input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_{cine}"
-#                     #Extracting center coords from the 2D MRI
-#                     vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-#                     centre_2DMRI = shape_center(vtk_file_2DMRI)
-#                     # print(vtk_file_2DMRI)
-#                     #Extracting center coords from the slice from the 3D model
-#                     vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-#                     centre_3Dslice = shape_center(vtk_file_3Dslice)
-#                     print(vtk_file_3Dslice)
-
-#                     points_2DMRI = read_points_vtk(vtk_file_2DMRI)
-#                     points_3Dslice = read_points_vtk(vtk_file_3Dslice)
-                
-#                     distance = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
-#                     print(distance)
-
-#                     row_data[f'distance_CINES_{cine}'] = distance
-                    
-#                 all_data.append(row_data)
-
-
-# # Create a DataFrame from the list of data
-# df = pd.DataFrame(all_data)
-
-# # Save the DataFrame to an Excel file
-# df.to_excel("center_distance_data_XY_values_testing.xlsx", index=False)
