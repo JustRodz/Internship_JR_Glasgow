@@ -793,7 +793,13 @@ def gap_calculator_vtk(points_A, points_B):
 
 
 
-# %% Reordering points if we have a non continuous outline
+#%% Extract the extremities in the lvot
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.interpolate import splprep, splev
+import vtk
+
+# Reordering points if we have a non continuous outline
 def reorder_points(points,  distance_threshold):
     """
     This function is required because the slice generated link points by their z-value, thus creating a non-continuous path.
@@ -839,13 +845,13 @@ def reorder_points(points,  distance_threshold):
 
 
 
-#%% Extract the extremities in the lvot
-
-import vtk
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.interpolate import splprep, splev
-
+def remove_consecutive_duplicates(points):
+    # Remove consecutive duplicate points based on either x or y coordinate
+    mask = np.ones(len(points), dtype=bool)
+    for i in range(1, len(points)):
+        if points[i, 0] == points[i-1, 0] or points[i, 1] == points[i-1, 1]:
+            mask[i] = False
+    return points[mask]
 
 def extract_and_fit_curves(filename):
     # Read the VTK file
@@ -863,9 +869,8 @@ def extract_and_fit_curves(filename):
     # Segment points into separate curves based on distance
     segments = []
     remaining_points = all_points.copy()
-
     while len(remaining_points) > 0:
-        segment = reorder_points(remaining_points, 4.0)
+        segment = reorder_points(remaining_points, 10.0)
         segments.append(segment)
         remaining_points = np.array([p for p in remaining_points if not np.any(np.all(p == segment, axis=1))])
 
@@ -874,39 +879,39 @@ def extract_and_fit_curves(filename):
     for segment in segments:
         endpoints.append((segment[0], segment[-1]))
 
-
-    # Plot the original points
-    plt.figure(figsize=(8, 6))
-    plt.scatter(all_points[:, 0], all_points[:, 1], c='blue', label='All Points')
-
-    # Fit curves to each segment and plot them
+    # Fit curves to each segment and plot them only in case of error
     for segment in segments:
+        segment = remove_consecutive_duplicates(segment)
         x = segment[:, 0]
         y = segment[:, 1]
 
         if len(x) > 3:  # Ensure there are enough points to fit a spline
-            spline, _ = splprep([x, y], s=len(x) /50) #Modify the value of s to adapt the smoothness
-            x_fit, y_fit = splev(np.linspace(0, 1, 100), spline)
-            plt.plot(x_fit, y_fit, c='orange', label='Fitted Curve')
+            try:
+                spline, _ = splprep([x, y], s=len(x)/1000, k=3) # Modify the value of s to adapt the smoothness
+                x_fit, y_fit = splev(np.linspace(0, 1, 100), spline)
+            except ValueError as e:
+                print(f"Error fitting spline for segment: {e}")
+                print(f"Segment x values: {x}")
+                print(f"Segment y values: {y}")
 
-    # Plot endpoints for each segment
-    for segment in segments:
-        plt.scatter(segment[0, 0], segment[0, 1], c='green', label='Endpoints', s=100)
-        plt.scatter(segment[-1, 0], segment[-1, 1], c='green', s=100)
+                # Plot problematic segment
+                plt.figure(figsize=(10, 6))
+                plt.plot(x, y, 'o-', label=f'Problematic Segment (Length: {len(x)})')
+                plt.title('Visualization of Problematic Segments')
+                plt.xlabel('X Coordinate')
+                plt.ylabel('Y Coordinate')
+                plt.legend()
+                plt.grid(True)
+                plt.show()
 
-    plt.title('Visualization of Points, Fitted Curves, and Endpoints')
-    plt.xlabel('X Coordinate')
-    plt.ylabel('Y Coordinate')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+    return endpoints
 
-    return(endpoints)
 
-# Example usage
-filename = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/jobs/sliced_CINES_LVOT_25/transverse_slice_2_3_6.17.vtk"
-enpoints_test = extract_and_fit_curves(filename)
-print(enpoints_test)
+
+# # Example usage
+# filename = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_LVOT_25/transverse_slice_0_1_-2.17.vtk"
+# enpoints_test = extract_and_fit_curves(filename)
+# print(enpoints_test)
 
 #%% Code a utiliser avec le cluster
 import subprocess
@@ -1158,25 +1163,7 @@ for cine in [24, 25]:
 
 #############################################################################################################################################################################
 
-#%% test calcul height
-height = []
-for t in range(40):
-    basepath = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25/LVOT_SSFP_CINE_25_vtk"  
-    vtk_file_top_point = os.path.join(basepath, f"rotated_surface_1_time_{t:02d}.vtk")
-    # print(vtk_file_top_point)
-    top_point = shape_center(vtk_file_top_point)
-    vtk_file_bottom_point = os.path.join(basepath, f"rotated_surface_2_time_{t:02d}.vtk")
-    # print(vtk_file_bottom_point)
-    bottom_point = shape_center(vtk_file_bottom_point)
-    height_t = calculate_distances_abs(top_point, bottom_point)
-    height.append(height_t)
-    
-    # print(bottom_point)
-    # print("for t = ", t, ", the height = ", Height)
-print(height)
-print(min(height))
-print(max(height))
-###########################################################################################################################################################################
+
 
 #%% Calculate distance & save them in Excel
 import os
@@ -1387,7 +1374,7 @@ def fit_model_and_find_minimum(t, file_path, first_col, second_col, model_func, 
     return optimal_params, (z_min, distance_min), plt
 
 # test
-t = 17
+t = 1
 file_path = 'center_distance_data_Z_values_systole_diastole.xlsx'
 first_col = 'z'
 second_col = 'distance_norm_V2'
@@ -1470,52 +1457,93 @@ min_distance, min_coords = plot_contour_and_find_min(file_path, t_value, X_col, 
 print(f"Minimum distance value: {min_distance:.3f} at coordinates (x, y) = ({min_coords[0]:.3f}, {min_coords[1]:.3f})")
 
 ####################################################################################################################################################################
-#%% LVOT : Calculate height & save them in Excel
+
+
+
+
+#%% test calcul height
+
 import os
-import numpy as np
 import pandas as pd
 
-# Execute shape_center, read_points_vtk, and calculate_distances
+def LVOT_2d_height2excel(xrange, yrange, zrange, timesteps, basepath, top_point_pattern, bottom_point_pattern, excel_output):
+    all_data = []
+    for x in xrange:
+        for y in yrange:
+            for z in zrange:
+                for t in (timesteps):
+                    row_data = {'x': x, 'y': y, 'z': z, 't': t}
+                    vtk_file_top_point = os.path.join(basepath, top_point_pattern.format(t=t) )
+                    top_point = shape_center(vtk_file_top_point)
 
-# Initialize a dictionary to store all data
-all_data = []
-
-for i in range(-2, -1):
-    for j in range(-5, 6):
-        for k in range(-5, 6):
-            for t in range(40):
-                row_data = {'i': i, 'j': j, 'k': k, 't': t}
-
-                for cine in [29, 30, 31, 32, 33, 34]:
-                    input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
-                    input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V3/jobs/sliced_CINES_{cine}"
-                    #Extracting center coords from the 2D MRI
-                    vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-                    centre_2DMRI = shape_center(vtk_file_2DMRI)
-                    # print(vtk_file_2DMRI)
-                    #Extracting center coords from the slice from the 3D model
-                    vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-                    centre_3Dslice = shape_center(vtk_file_3Dslice)
-                    print(vtk_file_3Dslice)
-
-                    points_2DMRI = read_points_vtk(vtk_file_2DMRI)
-                    points_3Dslice = read_points_vtk(vtk_file_3Dslice)
-                
-                    distance = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
-                    print(distance)
-
-                    row_data[f'distance_CINES_{cine}'] = distance
+                    vtk_file_bottom_point = os.path.join(basepath, bottom_point_pattern.format(t=t))
+                    bottom_point = shape_center(vtk_file_bottom_point)
                     
-                all_data.append(row_data)
+                    height_t = calculate_distances_abs(top_point, bottom_point)
+                    if t== timesteps[0]:
+                        h_init = height_t
+                    row_data['height_2d_model'] = height_t
+                    row_data['Strech'] = (height_t - h_init)/ h_init
+                    all_data.append(row_data)
+                    print("for x = ", x," for y = ", y," for z = ", z, " for t = ", t, ", the height = ", height_t)
+
+    # Create a DataFrame with the height data
+    df = pd.DataFrame(all_data)
+
+    # Save the DataFrame to an Excel file
+    df.to_excel(excel_output, index=False)
+
+# Example usage:
+xrange = range(0, 1)
+yrange = range(0, 1)
+zrange = range(-10, 11)
+timesteps = range(0, 40)
+basepath = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25/LVOT_SSFP_CINE_25_vtk"
+top_point = r"rotated_surface_1_time_{t:02d}.vtk"
+bottom_point = r"rotated_surface_2_time_{t:02d}.vtk"
+excel_output = "height_2Ddata_stretch.xlsx"
+LVOT_2d_height2excel(xrange, yrange, zrange, timesteps, basepath, top_point, bottom_point, excel_output)
+
+#%% LVOT height 3D model
+import os
+import pandas as pd
+import numpy as np
+
+def LVOT_3D_height2excel(xrange, yrange, zrange, timesteps, basepath, vtk_file_pattern, excel_output):
+    all_data = []
+    for x in xrange:
+        for y in yrange:
+            for z in zrange:
+                for t in timesteps:
+                    row_data = {'x': x, 'y': y, 'z': z, 't': t}
+                    output_pattern = vtk_file_pattern.format(x=x, y=y, z=z, t=t)
+                    filename = os.path.join(basepath, output_pattern)
+                    endpoints_test = extract_and_fit_curves(filename)
+                    height_loc3d = []
+                    for l in range(len(endpoints_test)):
+                        height_loc3d.append(calculate_distances_abs(endpoints_test[l][0],endpoints_test[l][1]))
+                    height_moy=np.mean(height_loc3d)
+                    if t== timesteps[0]:
+                        h_init=height_moy
+                    print(f"for z = {z} and t = {t}, height_moy = {height_moy}")
+                    row_data['height_3d_model'] = height_moy
+                    row_data['Strech'] = (height_moy - h_init)/ h_init
+                    all_data.append(row_data)
 
 
-# Create a DataFrame from the list of data
-df = pd.DataFrame(all_data)
+    df = pd.DataFrame(all_data)
 
-# Save the DataFrame to an Excel file
-df.to_excel("center_distance_data_XY_values_testing.xlsx", index=False)
+    # Save the DataFrame to an Excel file
+    df.to_excel(excel_output, index=False)
 
+# Test
+xrange = range(0, 1)
+yrange = range(0, 1)
+zrange = range(-10, 11)
+timesteps = range(0, 40)
+basepath = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_LVOT_25"
+vtk_file_pattern = r"transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
+excel_output = "center_distance_data_Z_values_LVOT_stretch.xlsx"
 
-
-
-
+LVOT_3D_height2excel(xrange, yrange, zrange, timesteps, basepath, vtk_file_pattern, excel_output)
+# %%
