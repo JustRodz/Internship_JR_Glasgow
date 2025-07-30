@@ -697,7 +697,15 @@ def vtk2Dslicer (model_path, input_seg_path, output_path, model3D_name_pattern, 
 
 
 
-# %% Shape_center + Calculate_distances
+# %% Generic functions used for extracting data
+# #Shape_center + Calculate_distances + Extract_and_fit_curves
+import numpy as np
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+from scipy.interpolate import splprep, splev
+import vtk
+
 def shape_center(vtk_file):
     """
     vtk_file (str): Input file for the existing 3D model.
@@ -792,12 +800,7 @@ def gap_calculator_vtk(points_A, points_B):
 #     print(f"Distance at timestep {i}: {distance}")
 
 
-
-#%% Extract the extremities in the lvot
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy.interpolate import splprep, splev
-import vtk
+# Extract the extremities in the lvot
 
 # Reordering points if we have a non continuous outline
 def reorder_points(points,  distance_threshold):
@@ -913,6 +916,20 @@ def extract_and_fit_curves(filename):
 # enpoints_test = extract_and_fit_curves(filename)
 # print(enpoints_test)
 
+
+#The following function allow to overwrite (mode = 'w') the specified excel file or to add data to it (mode = 'a')
+def save_to_excel(df, excel_output, mode='w', key_columns=None):
+    if mode == 'w':
+        df.to_excel(excel_output, index=False)
+    else:
+        try:
+            existing_df = pd.read_excel(excel_output)
+            combined_df = pd.merge(existing_df, df, on=key_columns, how='outer')
+            combined_df.to_excel(excel_output, index=False)
+        except FileNotFoundError:
+            df.to_excel(excel_output, index=False)
+
+##########################################################################################################################################################################
 #%% Code a utiliser avec le cluster
 import subprocess
 import multiprocessing
@@ -1170,45 +1187,63 @@ import os
 import numpy as np
 import pandas as pd
 
-# Execute shape_center, read_points_vtk, and calculate_distances
+# Execute shape_center, read_points_vtk, and calculate_distances before
 
-# Initialize a dictionary to store all data
-all_data = []
+def distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output, mode='w', key_columns=['x', 'y', 'z', 't']):
+    # Initialize a dictionary to store all data
+    all_data = []
 
-for i in range(-10, 11):
-    for j in range(0, 1):
-        for k in range(0, 1):
-            for t in range(40):
-                row_data = {'i': i, 'j': j, 'k': k, 't': t}
+    for x in xrange:
+        for y in yrange:
+            for z in zrange:
+                for t in timesteps:
+                    row_data = {'x': x, 'y': y, 'z': z, 't': t}
 
-                for cine in [29, 30, 31, 32, 33, 34]:
-                    input_path_2DMRI = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
-                    input_path_3Dslice = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_{cine}"
-                    #Extracting center coords from the 2D MRI
-                    vtk_file_2DMRI = os.path.join(input_path_2DMRI, f"rotated_{t}.vtk")
-                    centre_2DMRI = shape_center(vtk_file_2DMRI)
-                    # print(vtk_file_2DMRI)
-                    #Extracting center coords from the slice from the 3D model
-                    vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{k}_{j}_{i}.{t:02d}.vtk")
-                    centre_3Dslice = shape_center(vtk_file_3Dslice)
-                    print(vtk_file_3Dslice)
+                    for cine in cines:
+                        input_path_2DMRI = os.path.join(basepath_2dMRI, path_2d_pattern.format(cine = cine))
+                        input_path_3Dslice = os.path.join(basepath_3dmodel, path_3d_pattern.format(cine = cine))
 
-                    points_2DMRI = read_points_vtk(vtk_file_2DMRI)
-                    points_3Dslice = read_points_vtk(vtk_file_3Dslice)
-                
-                    distance = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
-                    print(distance)
+                        # Extracting center coords from the 2D MRI
+                        vtk_file_2DMRI = os.path.join(input_path_2DMRI, file_2d_pattern.format(t=t) )
+                        centre_2DMRI = shape_center(vtk_file_2DMRI)
 
-                    row_data[f'distance_CINES_{cine}'] = distance
-                    
-                all_data.append(row_data)
+                        # Extracting center coords from the slice from the 3D model
+                        vtk_file_3Dslice = os.path.join(input_path_3Dslice, file_3d_pattern.format(x=x, y=y, z=z, t=t) )
+                        centre_3Dslice = shape_center(vtk_file_3Dslice)
+
+                        distance_coords = calculate_distances(centre_2DMRI, centre_3Dslice)
+                        distance_abs = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
+
+                        # row_data[f'CINES_{cine}_centre_2dMRI'] = centre_2DMRI
+                        # row_data[f'CINES_{cine}_centre_3d_model'] = centre_3Dslice
+                        row_data[f'distance_xyz_CINES_{cine}'] = distance_coords
+                        row_data[f'distance_abs_CINES_{cine}'] = distance_abs
 
 
-# Create a DataFrame from the list of data
-df = pd.DataFrame(all_data)
+                    all_data.append(row_data)
 
-# Save the DataFrame to an Excel file
-df.to_excel("center_distance_data_XY_values_testing.xlsx", index=False)
+    # Create a DataFrame from the list of data
+    df = pd.DataFrame(all_data)
+
+    # Save the DataFrame to an Excel file
+    save_to_excel(df, excel_output, mode, key_columns)
+
+
+# #test
+# xrange = range(0, 1)
+# yrange = range(0, 1)
+# zrange = range(-10, 11)
+# timesteps = range(0, 40)
+# cines = [29, 30, 31, 32, 33, 34]
+# basepath_2dMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D"
+# path_2d_pattern = "AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+# file_2d_pattern = "rotated_{t}.vtk"
+# basepath_3dmodel = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
+# path_3d_pattern = "sliced_CINES_{cine}"
+# file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
+# excel_output = "center_distance_data_test.xlsx"
+# mode = 'a'
+# distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output)
 ###################################################################################################################
 
 #%% Calculate distance at diastole and systole modified version of the script above
@@ -1466,7 +1501,7 @@ print(f"Minimum distance value: {min_distance:.3f} at coordinates (x, y) = ({min
 import os
 import pandas as pd
 
-def LVOT_2d_height2excel(xrange, yrange, zrange, timesteps, basepath, top_point_pattern, bottom_point_pattern, excel_output):
+def LVOT_2d_height2excel(xrange, yrange, zrange, timesteps, basepath, top_point_pattern, bottom_point_pattern, excel_output, mode='w', key_columns=['x', 'y', 'z', 't']):
     all_data = []
     for x in xrange:
         for y in yrange:
@@ -1483,33 +1518,36 @@ def LVOT_2d_height2excel(xrange, yrange, zrange, timesteps, basepath, top_point_
                     if t== timesteps[0]:
                         h_init = height_t
                     row_data['height_2d_model'] = height_t
-                    row_data['Strech'] = (height_t - h_init)/ h_init
+                    row_data['Strech_2d'] = (height_t - h_init)/ h_init
                     all_data.append(row_data)
-                    print("for x = ", x," for y = ", y," for z = ", z, " for t = ", t, ", the height = ", height_t)
+                    # print("for x = ", x," for y = ", y," for z = ", z, " for t = ", t, ", the height = ", height_t)
 
     # Create a DataFrame with the height data
     df = pd.DataFrame(all_data)
 
     # Save the DataFrame to an Excel file
-    df.to_excel(excel_output, index=False)
+    save_to_excel(df, excel_output, mode, key_columns)
 
-# Example usage:
-xrange = range(0, 1)
-yrange = range(0, 1)
-zrange = range(-10, 11)
-timesteps = range(0, 40)
-basepath = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25/LVOT_SSFP_CINE_25_vtk"
-top_point = r"rotated_surface_1_time_{t:02d}.vtk"
-bottom_point = r"rotated_surface_2_time_{t:02d}.vtk"
-excel_output = "height_2Ddata_stretch.xlsx"
-LVOT_2d_height2excel(xrange, yrange, zrange, timesteps, basepath, top_point, bottom_point, excel_output)
+# # Example usage:
+# xrange = range(0, 1)
+# yrange = range(0, 1)
+# zrange = range(-10, 11)
+# timesteps = range(0, 40)
+# basepath = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25/LVOT_SSFP_CINE_25_vtk"
+# top_point = r"rotated_surface_1_time_{t:02d}.vtk"
+# bottom_point = r"rotated_surface_2_time_{t:02d}.vtk"
+# excel_output = "height_2Ddata_stretch.xlsx"
+# mode = 'a'
+# key_columns=['x', 'y', 'z', 't']
+# LVOT_2d_height2excel(xrange, yrange, zrange, timesteps, basepath, top_point, bottom_point, excel_output, mode)
 
+####################################################################################################################################################################
 #%% LVOT height 3D model
 import os
 import pandas as pd
 import numpy as np
 
-def LVOT_3D_height2excel(xrange, yrange, zrange, timesteps, basepath, vtk_file_pattern, excel_output):
+def LVOT_3D_height2excel(xrange, yrange, zrange, timesteps, basepath, vtk_file_pattern, excel_output, mode='w', key_columns=['x', 'y', 'z', 't']):
     all_data = []
     for x in xrange:
         for y in yrange:
@@ -1525,25 +1563,59 @@ def LVOT_3D_height2excel(xrange, yrange, zrange, timesteps, basepath, vtk_file_p
                     height_moy=np.mean(height_loc3d)
                     if t== timesteps[0]:
                         h_init=height_moy
-                    print(f"for z = {z} and t = {t}, height_moy = {height_moy}")
+                    # print(f"for z = {z} and t = {t}, height_moy = {height_moy}")
                     row_data['height_3d_model'] = height_moy
-                    row_data['Strech'] = (height_moy - h_init)/ h_init
+                    row_data['Strech_3d'] = (height_moy - h_init)/ h_init
                     all_data.append(row_data)
 
 
     df = pd.DataFrame(all_data)
 
     # Save the DataFrame to an Excel file
-    df.to_excel(excel_output, index=False)
+    save_to_excel(df, excel_output, mode, key_columns)
 
 # Test
+# xrange = range(0, 1)
+# yrange = range(0, 1)
+# zrange = range(-10, 11)
+# timesteps = range(0, 40)
+# basepath = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_LVOT_25"
+# vtk_file_pattern = r"transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
+# excel_output = "center_distance_data_Z_values_LVOT_stretch.xlsx"
+# mode = 'a'
+# key_columns=['x', 'y', 'z', 't']
+# LVOT_3D_height2excel(xrange, yrange, zrange, timesteps, basepath, vtk_file_pattern, excel_output, mode)
+
+########################################################################################################################################################################
+#%% Script gathering all data in a single excel
+
+
+# Getting data from the LVOT slice
 xrange = range(0, 1)
 yrange = range(0, 1)
 zrange = range(-10, 11)
 timesteps = range(0, 40)
-basepath = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_LVOT_25"
-vtk_file_pattern = r"transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
-excel_output = "center_distance_data_Z_values_LVOT_stretch.xlsx"
+basepath_2d_LVOT = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/LVOT_seg/20160906131917_LVOT_SSFP_CINE_25/LVOT_SSFP_CINE_25_vtk"
+top_point = r"rotated_surface_1_time_{t:02d}.vtk"
+bottom_point = r"rotated_surface_2_time_{t:02d}.vtk"
+excel_output = "Simulation_complete_data_test.xlsx"
+mode='a'
+key_columns=['x', 'y', 'z', 't']
+LVOT_2d_height2excel(xrange, yrange, zrange, timesteps, basepath_2d_LVOT, top_point, bottom_point, excel_output, 'w', key_columns) ### We use mode='w' here to clear the previous results
+print("LVOT_2d_height2excel execution finished")
 
-LVOT_3D_height2excel(xrange, yrange, zrange, timesteps, basepath, vtk_file_pattern, excel_output)
+basepath_3d_LVOT = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/sliced_CINES_LVOT_25"
+vtk_file_pattern = r"transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
+LVOT_3D_height2excel(xrange, yrange, zrange, timesteps, basepath_3d_LVOT, vtk_file_pattern, excel_output, mode, key_columns)
+print("LVOT_3d_height2excel execution finished")
+
+cines = [29, 30, 31, 32, 33, 34]
+basepath_2dMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D"
+path_2d_pattern = "AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+file_2d_pattern = "rotated_{t}.vtk"
+basepath_3dmodel = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
+path_3d_pattern = "sliced_CINES_{cine}"
+file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
+distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output, mode, key_columns)
+print("distance2excel execution finished")
 # %%
