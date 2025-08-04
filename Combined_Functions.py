@@ -1189,10 +1189,10 @@ import pandas as pd
 
 # Execute shape_center, read_points_vtk, and calculate_distances before
 
-def distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output, mode='w', key_columns=['x', 'y', 'z', 't']):
+def distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output=None, mode='w', key_columns=['x', 'y', 'z', 't']):
     # Initialize a dictionary to store all data
     all_data = []
-
+    
     for x in xrange:
         for y in yrange:
             for z in zrange:
@@ -1213,7 +1213,7 @@ def distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, pat
 
                         distance_coords = calculate_distances(centre_2DMRI, centre_3Dslice)
                         distance_abs = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
-
+                        
                         # row_data[f'CINES_{cine}_centre_2dMRI'] = centre_2DMRI
                         # row_data[f'CINES_{cine}_centre_3d_model'] = centre_3Dslice
                         row_data[f'distance_xyz_CINES_{cine}'] = distance_coords
@@ -1221,12 +1221,14 @@ def distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, pat
 
 
                     all_data.append(row_data)
-
+    
     # Create a DataFrame from the list of data
     df = pd.DataFrame(all_data)
+    if excel_output is not None
+        # Save the DataFrame to an Excel file
+        save_to_excel(df, excel_output, mode, key_columns)
 
-    # Save the DataFrame to an Excel file
-    save_to_excel(df, excel_output, mode, key_columns)
+    return(df)
 
 
 # #test
@@ -1619,3 +1621,99 @@ file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
 distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output, mode, key_columns)
 print("distance2excel execution finished")
 # %%
+#Calculate the residuals before using least square
+
+# Use example
+cines = [29, 30, 31, 32, 33, 34]
+basepath_2dMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D"
+path_2d_pattern = "AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+file_2d_pattern = "rotated_{t}.vtk"
+basepath_3dmodel = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
+path_3d_pattern = "sliced_CINES_{cine}"
+file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
+df = distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern)
+
+
+# range across all x, y, combination in the defined range
+def cal_residual(param_ranges, df, t=12):
+    x_range, y_range, z_range = param_ranges
+
+    # Initialize a list to store all residuals
+    all_residuals = []
+    total_rx = []
+    total_ry = []
+    total_rz = []
+    # Iterate over all combinations of x, y, and z within the specified ranges
+    for x in np.linspace(x_range[0], x_range[1]): 
+        for y in np.linspace(y_range[0], y_range[1]):
+            for z in np.linspace(z_range[0], z_range[1]):
+                # Filter the DataFrame for the specified t value and x, y, z parameters
+                df_t = df[(df['t'] == t) & (df['i'] == x) & (df['j'] == y) & (df['k'] == z)]
+
+                
+
+                for _, row in df_t.iterrows():
+                    # Initialize a dictionary to store residuals for each CINE (horizontal slices)
+                    residuals = {
+                        'CINES_29': {'rx': [], 'ry': [], 'rz': []},
+                        'CINES_30': {'rx': [], 'ry': [], 'rz': []},
+                        'CINES_31': {'rx': [], 'ry': [], 'rz': []},
+                        'CINES_32': {'rx': [], 'ry': [], 'rz': []},
+                        'CINES_33': {'rx': [], 'ry': [], 'rz': []},
+                        'CINES_34': {'rx': [], 'ry': [], 'rz': []}
+                    }
+
+                    for cine in ['CINES_29', 'CINES_30', 'CINES_31', 'CINES_32', 'CINES_33', 'CINES_34']:
+                        distances = eval(row[f'distance_{cine}'])
+                        # Distances is a list of three values [distance_x, distance_y, distance_z]
+                        distance_x, distance_y, distance_z = distances
+
+                        # Append the distances to the respective lists in the dictionary
+                        residuals[cine]['rx'].append(distance_x)
+                        residuals[cine]['ry'].append(distance_y)
+                        residuals[cine]['rz'].append(distance_z) 
+
+                    # Calculate the sum of all rx, ry, and rz for all CINEs
+                    total_rx.append(sum(sum(residuals[cine]['rx']) for cine in residuals))
+                    total_ry.append(sum(sum(residuals[cine]['ry']) for cine in residuals))
+                    total_rz.append(sum(sum(residuals[cine]['rz']) for cine in residuals))
+
+                # Append the residuals for this combination of x, y, and z
+                all_residuals.append((x, y, z, total_rx, total_ry, total_rz))
+                                     
+    return(all_residuals)
+
+
+#each separate x, y, z commbination
+def cal_residual(param_vec, df, t=12):
+    x, y, z = param_vec
+
+    # Filter the DataFrame for the specified t value and x, y, z parameters
+    df_t = df[(df['t'] == t) & (df['i'] == x) & (df['j'] == y) & (df['k'] == z)]
+
+    # Initialize lists to store residuals
+    total_rx = []
+    total_ry = []
+    total_rz = []
+
+    for _, row in df_t.iterrows():
+        for cine in ['CINES_29', 'CINES_30', 'CINES_31', 'CINES_32', 'CINES_33', 'CINES_34']:
+            distances = eval(row[f'distance_{cine}'])
+            distance_x, distance_y, distance_z = distances
+            total_rx.append(distance_x)
+            total_ry.append(distance_y)
+            total_rz.append(distance_z)
+
+    # Combine all residuals into a single array
+    residuals = np.concatenate([total_rx, total_ry, total_rz])
+
+    return residuals
+
+
+
+
+# Reading febio?
+# model = FEBShellModel(files,pressure,'HGO',order)
+# param_dict = ParamDict(model.params)
+# #param_dict.save('params.csv') #after saving this file, it was modified and then we read it in the next line
+# param_dict.read('params.csv')
