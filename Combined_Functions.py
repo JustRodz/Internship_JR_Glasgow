@@ -88,7 +88,7 @@ def generate_load_curve(file_path, func, start=0, end=40, step=1):
 
 
 
-#%% Calculate the normal vector and acquire data on the BC
+#%% Miscellanous function such as : updates_BC_param, updates_output, warp_vtk and calculate_svd_normal
 
 #Test to target the node_set related to precribed displacement B.C
 
@@ -271,6 +271,53 @@ def update_BC_parameters(febio_file, boundary_name, updates, output_file_path=No
 # file_path = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_PreSim_modifier_test.feb"
 # update_BC_parameters(file_path, "PrescribedDisplacement2", updates)
 
+#Useful to modify the type of output file
+def update_output(febio_file, updates, output_file_path=None):
+    # Load the XML file
+    tree = ET.parse(febio_file)
+    root = tree.getroot()
+
+    # Iterate through all boundary conditions
+    for plotfile in root.iter('plotfile'):
+        plotfile.set('type', str(updates['new_type']))
+
+
+    # Determine the file path to write the updated XML
+    output_path = output_file_path if output_file_path else febio_file
+
+    # Write the updated XML back to the file
+    with open(output_path, 'w') as f:
+        f.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
+        tree.write(f, encoding='unicode')
+
+# updates = {'new_type': 'vtk'}
+# input_dir = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
+# for i in range (-5,6):
+#     for j in range (-5, 6):
+#         for k in range (-2, -1):
+#             file_path = os.path.join(input_dir, f"Whole_heart_2016_42_mesh_V3_PreSim_{i}_{j}_{k}.feb")
+#             update_output(file_path, updates)
+
+
+def warp_vtk(input_file, output_file):
+    reader = vtk.vtkUnstructuredGridReader()
+    reader.SetFileName(input_file)
+    reader.Update()
+    # Create the warp vector filter and set its input
+    warp_vector = vtk.vtkWarpVector()
+    warp_vector.SetInputData(reader.GetOutput())
+
+    # Update the warp vector filter to apply the warp
+    warp_vector.Update()
+
+    # Write the warped model to a new VTK file
+    writer = vtk.vtkUnstructuredGridWriter()
+    writer.SetFileName(output_file)
+    writer.SetInputData(warp_vector.GetOutput())
+    writer.Write()
+
+
+    print(f'Processed : {output_file}')
 
 
 #%% Script using Update_BC_parameters to adjust our simulation
@@ -299,32 +346,7 @@ for i in range (-5,6):
             update_BC_parameters(output, "PrescribedDisplacement4", z_bc)
 
 
-#%%#%% Useful to modify the type of output file
-def update_output(febio_file, updates, output_file_path=None):
-    # Load the XML file
-    tree = ET.parse(febio_file)
-    root = tree.getroot()
 
-    # Iterate through all boundary conditions
-    for plotfile in root.iter('plotfile'):
-        plotfile.set('type', str(updates['new_type']))
-
-
-    # Determine the file path to write the updated XML
-    output_path = output_file_path if output_file_path else febio_file
-
-    # Write the updated XML back to the file
-    with open(output_path, 'w') as f:
-        f.write('<?xml version="1.0" encoding="ISO-8859-1"?>\n')
-        tree.write(f, encoding='unicode')
-
-updates = {'new_type': 'vtk'}
-input_dir = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation"
-for i in range (-5,6):
-    for j in range (-5, 6):
-        for k in range (-2, -1):
-            file_path = os.path.join(input_dir, f"Whole_heart_2016_42_mesh_V3_PreSim_{i}_{j}_{k}.feb")
-            update_output(file_path, updates)
 
 #%% Saving the header of the segmentation (useful to rotate the model)
 def Seg_header(file_path, seg_path, output_path):
@@ -600,18 +622,20 @@ import numpy as np
 
 
 
-def vtk2Dslicer (model_path, input_seg_path, output_path, model3D_name_pattern, seg_name_pattern, output_pattern, A):
+def vtk2Dslicer (model_path, input_seg_path, output_path, model3D_name_pattern, seg_name_pattern, output_pattern, timesteps):
     """
     model_path (str): Input file for the existing 3D model.
+    input_seg_path : Input file for the existing 2d segmentation.
     output_path (str): Output folder for generated .vtk files.
-    A (int): Number of timesteps in the model
     model3D_name_pattern (str): Pattern for the 3D model filenames, using {i} for the timestep.
     seg_name_pattern (str): Pattern for the rotated segmentation filenames, using {i} for the timestep.
+    output_pattern (str): Pattern for the output .vtk filenames
+    timesteps (int): Number of timesteps in the model
     """
     os.makedirs(output_path, exist_ok=True)
 
 
-    for t in range(A):   ##range value is equal to the number of time step, 40 in our case
+    for t in range(timesteps):   ##range value is equal to the number of time step, 40 in our case
         vtk_path_model = os.path.join(model_path, model3D_name_pattern.format(t=t))
         print(f"Reading model: {vtk_path_model}")  # Debug print
         if not os.path.exists(vtk_path_model):
@@ -1054,7 +1078,7 @@ run_simulation(basepath, (-2, -1), (-5, 6), (-5, 6), generate_feb_path, generate
 
 
 #%% To extract data we need to apply the "warp by vector" function to our file
-def warp_vtk(x_range, y_range, z_range, timesteps, input_pattern, output_pattern):
+def warp_vtk_range(x_range, y_range, z_range, timesteps, input_pattern, output_pattern):
     for x in x_range:
         for y in y_range:
             for z in z_range:
@@ -1087,7 +1111,7 @@ z_values = range(-10, 11)
 timestep_values = range(40)
 input_pattern = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/Output_WH_{x}_{y}_{z}.{t}.vtk"
 output_pattern = f"C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs/Output_WH_Warped_{x}_{y}_{z}.{t}.vtk"
-warp_vtk(x_values, y_values, z_values, timestep_values, input_pattern, output_pattern)
+warp_vtk_range(x_values, y_values, z_values, timestep_values, input_pattern, output_pattern)
 
 
 
@@ -1189,7 +1213,7 @@ import pandas as pd
 
 # Execute shape_center, read_points_vtk, and calculate_distances before
 
-def distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output=None, mode='w', key_columns=['x', 'y', 'z', 't']):
+def distance2excel_range(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output=None, mode='w', key_columns=['x', 'y', 'z', 't']):
     # Initialize a dictionary to store all data
     all_data = []
     
@@ -1224,13 +1248,51 @@ def distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, pat
     
     # Create a DataFrame from the list of data
     df = pd.DataFrame(all_data)
-    if excel_output is not None
+    if excel_output is not None:
         # Save the DataFrame to an Excel file
         save_to_excel(df, excel_output, mode, key_columns)
 
     return(df)
 
+def distance2excel(timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, file_3d_pattern, excel_output=None, mode='w', key_columns=['x', 'y', 'z', 't']):
+    # Initialize a dictionary to store all data
+    all_data = []
+    
+    for t in range(timesteps):
+        row_data = {'t': t}
 
+        for cine in cines:
+            input_path_2DMRI = os.path.join(basepath_2dMRI, path_2d_pattern.format(cine = cine))
+            input_path_3Dslice = os.path.join(basepath_3dmodel, path_3d_pattern.format(cine = cine))
+
+            # Extracting center coords from the 2D MRI
+            vtk_file_2DMRI = os.path.join(input_path_2DMRI, file_2d_pattern.format(t=t) )
+            print("vtk_file_2DMRI : ", vtk_file_2DMRI)
+            centre_2DMRI = shape_center(vtk_file_2DMRI)
+
+            # Extracting center coords from the slice from the 3D model
+            vtk_file_3Dslice = os.path.join(input_path_3Dslice, file_3d_pattern.format(t=t) )
+            print("vtk_file_3Dslice : ", vtk_file_3Dslice)
+            centre_3Dslice = shape_center(vtk_file_3Dslice)
+
+            distance_coords = calculate_distances(centre_2DMRI, centre_3Dslice)
+            distance_abs = calculate_distances_abs(centre_2DMRI, centre_3Dslice)
+            
+            # row_data[f'CINES_{cine}_centre_2dMRI'] = centre_2DMRI
+            # row_data[f'CINES_{cine}_centre_3d_model'] = centre_3Dslice
+            row_data[f'distance_xyz_CINES_{cine}'] = distance_coords
+            row_data[f'distance_abs_CINES_{cine}'] = distance_abs
+
+
+        all_data.append(row_data)
+    
+    # Create a DataFrame from the list of data
+    df = pd.DataFrame(all_data)
+    if excel_output is not None:
+        # Save the DataFrame to an Excel file
+        save_to_excel(df, excel_output, mode, key_columns)
+
+    return(df)
 # #test
 # xrange = range(0, 1)
 # yrange = range(0, 1)
@@ -1245,7 +1307,7 @@ def distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, pat
 # file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
 # excel_output = "center_distance_data_test.xlsx"
 # mode = 'a'
-# distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output)
+# distance2excel_range(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output)
 ###################################################################################################################
 
 #%% Calculate distance at diastole and systole modified version of the script above
@@ -1273,8 +1335,9 @@ for x in range(0, 1):
                     # print(vtk_file_2DMRI)
                     #Extracting center coords from the slice from the 3D model
                     vtk_file_3Dslice = os.path.join(input_path_3Dslice, f"transverse_slice_{x}_{y}_{z}.{t_model:02d}.vtk")
-                    centre_3Dslice = shape_center(vtk_file_3Dslice)
                     print(vtk_file_3Dslice)
+                    centre_3Dslice = shape_center(vtk_file_3Dslice)
+
 
                     points_2DMRI = read_points_vtk(vtk_file_2DMRI)
                     points_3Dslice = read_points_vtk(vtk_file_3Dslice)
@@ -1410,18 +1473,96 @@ def fit_model_and_find_minimum(t, file_path, first_col, second_col, model_func, 
 
     return optimal_params, (z_min, distance_min), plt
 
+
 # test
 t = 1
-file_path = 'center_distance_data_Z_values_systole_diastole.xlsx'
-first_col = 'z'
-second_col = 'distance_norm_V2'
-fixed_col = 't'
+file_path = "C:/Users/jr403s/Documents/code/Simulation_complete_data_test.xlsx"
+first_col = 't'
+second_col = 'Strech_3d'
+fixed_col = 'z'
 model_func = lambda z, a, b, c: a * (z**2) + b * z + c
 initial_params = [1.0, 1.0, 1.0]
 
 optimal_params, min_info, plot = fit_model_and_find_minimum(t, file_path, first_col, second_col, model_func, initial_params, fixed_col)
 
 ####################################################################################################################################################
+
+#%% Test, max strectch depending on t
+from scipy.optimize import least_squares, minimize
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+def fit_model_and_find_maximum(t, file_path, first_col, second_col, model_func, initial_params, fixed_col=None):
+    """
+    Fit a model to data and find the maximum of the fitted model.
+    Parameters:
+    - t: The fixed value of t to filter the data.
+    - file_path: Path to the Excel file.
+    - first_col: Name of the column containing first values (z here) which serves for the X-axis.
+    - second_col: Name of the column containing the second values (distance here) which serves for the Y-axis.
+    - fixed_col: Name of the column containing the fixed value (t here).
+    - model_func: The model function to fit.
+    - initial_params: Initial parameters for the model.
+    Returns:
+    - A tuple containing optimal parameters, maximum value information, and the plot.
+    """
+    # Load data from the Excel file
+    data = pd.read_excel(file_path)
+
+    # Filter data for the fixed value of t if fixed_col is provided
+    if fixed_col is not None:
+        fixed_data = data[data[fixed_col] == t].copy()
+    else:
+        fixed_data = data.copy()
+
+    # Extract columns z and distance
+    z = fixed_data[first_col].values
+    distance = fixed_data[second_col].values
+
+    # Residual function for the model
+    def residuals(params, z, distance):
+        return distance - model_func(z, *params)
+
+    # Least squares optimization
+    result = least_squares(residuals, initial_params, args=(z, distance))
+
+    # Optimal parameters
+    optimal_params = result.x
+    print(f"For z = {t}")
+    print(f"Optimal parameters: {optimal_params}")
+
+    # Find the maximum of the fitted model by minimizing the negative of the model
+    result_max = minimize(lambda z: -model_func(z, *optimal_params), x0=0)
+
+    # Maximum of the model
+    z_max = result_max.x[0]
+    distance_max = -result_max.fun
+    print(f"Maximum of the model at t = {z_max}: Stretch = {distance_max}")
+
+    # Plot the data and the fitted model
+    plt.scatter(z, distance, label='Data')
+    z_fit = np.linspace(min(z), max(z), 100)
+    distance_fit = model_func(z_fit, *optimal_params)
+    plt.plot(z_fit, distance_fit, label='Fitted model', color='red')
+    plt.scatter(z_max, distance_max, color='green', label=f'Maximum: ({z_max:.2f}, {distance_max:.2f})')
+    plt.xlabel(first_col)
+    plt.ylabel(second_col)
+    plt.title(f'Model fitted for z = {t}')
+    plt.legend()
+    plt.show()
+
+    return optimal_params, (z_max, distance_max), plt
+
+# Test
+t = 0
+file_path = "C:/Users/jr403s/Documents/code/Simulation_complete_data_test.xlsx"
+first_col = 't'
+second_col = 'Strech_2d'
+fixed_col = 'z'
+model_func = lambda t, a, b, c, d, e, f, g: a * (t**6) + b * (t**5) + c * (t**4) + d * (t**3) + e * (t**2) + f * t + g
+initial_params = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+optimal_params, max_info, plot = fit_model_and_find_maximum(t, file_path, first_col, second_col, model_func, initial_params, fixed_col)
 
 #%% function plotting the contour graph
 import pandas as pd
@@ -1486,7 +1627,7 @@ def plot_contour_and_find_min(file_path, t_value, X_col, Y_col, distance_col):
 
 # Example usage of the function
 file_path = 'center_distance_data_XY_values_testing.xlsx'
-t_value = 17
+t_value = 1
 distance_col = 'distance_norm'
 X_col = 'k'
 Y_col = 'j'
@@ -1618,9 +1759,9 @@ file_2d_pattern = "rotated_{t}.vtk"
 basepath_3dmodel = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
 path_3d_pattern = "sliced_CINES_{cine}"
 file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
-distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output, mode, key_columns)
+distance2excel_range(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output, mode, key_columns)
 print("distance2excel execution finished")
-# %%
+# %% Crash test old residual
 #Calculate the residuals before using least square
 
 # Use example
@@ -1631,7 +1772,7 @@ file_2d_pattern = "rotated_{t}.vtk"
 basepath_3dmodel = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
 path_3d_pattern = "sliced_CINES_{cine}"
 file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
-df = distance2excel(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern)
+df = distance2excel_range(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern)
 
 
 # range across all x, y, combination in the defined range
@@ -1717,3 +1858,81 @@ def cal_residual(param_vec, df, t=12):
 # param_dict = ParamDict(model.params)
 # #param_dict.save('params.csv') #after saving this file, it was modified and then we read it in the next line
 # param_dict.read('params.csv')
+
+
+#%% Least square optimization
+def write_feb(reference, NewFebName, params = None): 
+    for i in range(len(params)):
+        update_BC_parameters(reference, params[i][0], params[i][1], NewFebName)
+    updates_file_output = {'new_type': 'vtk'}
+    update_output(NewFebName, updates_file_output, NewFebName)
+    return
+
+
+
+def run_febio(file_path, file_name):
+    print("Running FEBio simulation", flush=True)
+
+    try:
+        # Command to set environment variable
+        os.system('export OMP_NUM_THREADS=2')
+        feb_file = os.path.join(file_path, file_name+ '.feb')
+        log_file = os.path.join(file_path, file_name+ '.log')
+        # Command to run FEBio
+        result = os.system(f'febio4 {feb_file} -o {log_file}')
+        print(f"Command executed with return code: {result}")
+    except Exception as e:
+        print(f"Could not run FEBio or some other error: {e}", flush=True)
+        return
+    log_file_path = log_file
+    print(f"Attempting to open log file at: {log_file_path}")
+
+    try:
+        with open(log_file_path, 'r') as logf:
+            lines = logf.readlines()
+            # Check if the last non-empty line contains the termination message
+            last_line = next((line for line in reversed(lines) if line.strip()), "")
+            if "N O R M A L   T E R M I N A T I O N" in last_line:
+                print("FEBio simulation completed", flush=True)
+                vtk_file = os.path.join(file_path, file_name+ '.0.vtk')
+                return vtk_file
+            else:
+                raise RuntimeError("Error: FEBio simulation did not end normally. Exiting.")
+    except Exception as e:
+        print(f"Error reading log file: {e}")
+
+
+## TEST##
+timesteps = 40
+cines =[29, 30, 31, 32, 33, 34]
+main_path = "C:/Users/jr403s/Documents/Least_square_test/"
+main_file_name = "Whole_heart_2016_42_mesh_V3_test_rewrite"
+reference_file = "C:/Users/jr403s/Documents/Least_square_test/Whole_heart_2016_42_mesh_V3_reference_v1.feb"
+new_simu = main_path + main_file_name 
+new_feb_file = main_path + main_file_name +".feb"
+new_params =  [["PrescribedDisplacement2",{'initial_value': 2, 'relative': 0} ], ["PrescribedDisplacement3",{'initial_value': -2, 'relative': 0} ], ["PrescribedDisplacement4",{'initial_value': -10, 'relative': 0} ]]
+write_feb(reference_file, new_feb_file, new_params)
+run_febio(main_path, main_file_name)
+for t in range(timesteps):
+    input_warp = new_simu + f".{t}.vtk"
+    output_warp = new_simu + f"_warped.{t}.vtk"
+    warp_vtk(input_warp, output_warp)
+for cine in cines:
+    input_seg = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+    output_path = os.path.join(main_path, f"AO_SINUS_STACK_CINES_{cine}_vtk")
+    
+    model3D_pattern = main_file_name + "_warped.{t}.vtk"
+    seg_pattern = "rotated_{t}.vtk"
+    output_pattern = main_file_name + "_transverse_slice.{t}.vtk"
+    vtk2Dslicer(main_path, input_seg, output_path, model3D_pattern, seg_pattern, output_pattern, timesteps)
+
+
+path_2dMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D"
+path_2d_pattern = "AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+file_2d_pattern = "rotated_{t}.vtk"
+basepath_3dmodel = main_path
+path_3d_pattern = "AO_SINUS_STACK_CINES_{cine}_vtk"
+file_3d_pattern = main_file_name + "_transverse_slice.{t}.vtk"
+excel_output = main_path + "center_distance_complete_test.xlsx"
+distance2excel(timesteps, cines, path_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, file_3d_pattern, excel_output)
+# %%
