@@ -88,10 +88,10 @@ def generate_load_curve(file_path, func, start=0, end=40, step=1):
 
 
 
-#%% Miscellanous function such as : updates_BC_param, updates_output, warp_vtk and calculate_svd_normal
+#%% Miscellanous function such as : updates_BC_param, updates_output, warp_vtk, calculate_svd_normal, write_ feb and run_febio
+# Miscellanous function such as : updates_BC_param, updates_output, warp_vtk, calculate_svd_normal, write_ feb and run_febio
 
 #Test to target the node_set related to precribed displacement B.C
-
 def find_presc_disp_node(feb_file_path):
     with open(feb_file_path, 'r') as file:
         content = file.read()
@@ -315,10 +315,49 @@ def warp_vtk(input_file, output_file):
     writer.SetFileName(output_file)
     writer.SetInputData(warp_vector.GetOutput())
     writer.Write()
+    # print(f'Processed : {output_file}')
 
 
-    print(f'Processed : {output_file}')
 
+def write_feb(reference, NewFebName, params = None): 
+    for i in range(len(params)):
+        update_BC_parameters(reference, params[i][0], params[i][1], NewFebName)
+    updates_file_output = {'new_type': 'vtk'}
+    update_output(NewFebName, updates_file_output, NewFebName)
+    return
+
+
+
+def run_febio(file_path, file_name):
+    print("Running FEBio simulation", flush=True)
+
+    try:
+        # Command to set environment variable
+        os.system('export OMP_NUM_THREADS=2')
+        feb_file = os.path.join(file_path, file_name+ '.feb')
+        log_file = os.path.join(file_path, file_name+ '.log')
+        # Command to run FEBio
+        result = os.system(f'febio4 {feb_file} -o {log_file}')
+        print(f"Command executed with return code: {result}")
+    except Exception as e:
+        print(f"Could not run FEBio or some other error: {e}", flush=True)
+        return
+    log_file_path = log_file
+    print(f"Attempting to open log file at: {log_file_path}")
+
+    try:
+        with open(log_file_path, 'r') as logf:
+            lines = logf.readlines()
+            # Check if the last non-empty line contains the termination message
+            last_line = next((line for line in reversed(lines) if line.strip()), "")
+            if "N O R M A L   T E R M I N A T I O N" in last_line:
+                print("FEBio simulation completed", flush=True)
+                vtk_file = os.path.join(file_path, file_name+ '.0.vtk')
+                return vtk_file
+            else:
+                raise RuntimeError("Error: FEBio simulation did not end normally. Exiting.")
+    except Exception as e:
+        print(f"Error reading log file: {e}")
 
 #%% Script using Update_BC_parameters to adjust our simulation
 
@@ -614,11 +653,15 @@ print("vtk rotation done")
 
 
 
-#%% vtk2Dslicer
+#%% # %% Generic functions used for extracting data
+# #Shape_center + Calculate_distances + Extract_and_fit_curves + vtk2Dslicer
+
 import os
 import vtk
 import numpy as np
-
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.interpolate import splprep, splev
 
 
 
@@ -637,7 +680,7 @@ def vtk2Dslicer (model_path, input_seg_path, output_path, model3D_name_pattern, 
 
     for t in range(timesteps):   ##range value is equal to the number of time step, 40 in our case
         vtk_path_model = os.path.join(model_path, model3D_name_pattern.format(t=t))
-        print(f"Reading model: {vtk_path_model}")  # Debug print
+        # print(f"Reading model: {vtk_path_model}")  # Debug print
         if not os.path.exists(vtk_path_model):
             print(f"File not found: {vtk_path_model}")
             continue
@@ -700,9 +743,8 @@ def vtk2Dslicer (model_path, input_seg_path, output_path, model3D_name_pattern, 
         writer.SetInputData(cutPolyData)
         writer.SetFileTypeToASCII()
         writer.Write()
-    print("vtk2Dslicer - execution completed")
-# except Exception as e:
-#         print(f"An error occurred: {e}")
+    # print("vtk2Dslicer - execution completed")
+
 
 
 # # # test
@@ -718,17 +760,6 @@ def vtk2Dslicer (model_path, input_seg_path, output_path, model3D_name_pattern, 
 
 
 
-
-
-
-# %% Generic functions used for extracting data
-# #Shape_center + Calculate_distances + Extract_and_fit_curves
-import numpy as np
-import pandas as pd
-import os
-import matplotlib.pyplot as plt
-from scipy.interpolate import splprep, splev
-import vtk
 
 def shape_center(vtk_file):
     """
@@ -1267,12 +1298,12 @@ def distance2excel(timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pa
 
             # Extracting center coords from the 2D MRI
             vtk_file_2DMRI = os.path.join(input_path_2DMRI, file_2d_pattern.format(t=t) )
-            print("vtk_file_2DMRI : ", vtk_file_2DMRI)
+            # print("vtk_file_2DMRI : ", vtk_file_2DMRI)
             centre_2DMRI = shape_center(vtk_file_2DMRI)
 
             # Extracting center coords from the slice from the 3D model
             vtk_file_3Dslice = os.path.join(input_path_3Dslice, file_3d_pattern.format(t=t) )
-            print("vtk_file_3Dslice : ", vtk_file_3Dslice)
+            # print("vtk_file_3Dslice : ", vtk_file_3Dslice)
             centre_3Dslice = shape_center(vtk_file_3Dslice)
 
             distance_coords = calculate_distances(centre_2DMRI, centre_3Dslice)
@@ -1761,145 +1792,8 @@ path_3d_pattern = "sliced_CINES_{cine}"
 file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
 distance2excel_range(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, excel_output, mode, key_columns)
 print("distance2excel execution finished")
-# %% Crash test old residual
-#Calculate the residuals before using least square
 
-# Use example
-cines = [29, 30, 31, 32, 33, 34]
-basepath_2dMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D"
-path_2d_pattern = "AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
-file_2d_pattern = "rotated_{t}.vtk"
-basepath_3dmodel = "C:/Users/jr403s/Documents/Model_V2_1/jobs/jobs/Whole_heart_2016_42_mesh_V3_variation/Simulation_V2/jobs"
-path_3d_pattern = "sliced_CINES_{cine}"
-file_3d_pattern = "transverse_slice_{x}_{y}_{z}.{t:02d}.vtk"
-df = distance2excel_range(xrange, yrange, zrange, timesteps, cines, basepath_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern)
-
-
-# range across all x, y, combination in the defined range
-def cal_residual(param_ranges, df, t=12):
-    x_range, y_range, z_range = param_ranges
-
-    # Initialize a list to store all residuals
-    all_residuals = []
-    total_rx = []
-    total_ry = []
-    total_rz = []
-    # Iterate over all combinations of x, y, and z within the specified ranges
-    for x in np.linspace(x_range[0], x_range[1]): 
-        for y in np.linspace(y_range[0], y_range[1]):
-            for z in np.linspace(z_range[0], z_range[1]):
-                # Filter the DataFrame for the specified t value and x, y, z parameters
-                df_t = df[(df['t'] == t) & (df['i'] == x) & (df['j'] == y) & (df['k'] == z)]
-
-                
-
-                for _, row in df_t.iterrows():
-                    # Initialize a dictionary to store residuals for each CINE (horizontal slices)
-                    residuals = {
-                        'CINES_29': {'rx': [], 'ry': [], 'rz': []},
-                        'CINES_30': {'rx': [], 'ry': [], 'rz': []},
-                        'CINES_31': {'rx': [], 'ry': [], 'rz': []},
-                        'CINES_32': {'rx': [], 'ry': [], 'rz': []},
-                        'CINES_33': {'rx': [], 'ry': [], 'rz': []},
-                        'CINES_34': {'rx': [], 'ry': [], 'rz': []}
-                    }
-
-                    for cine in ['CINES_29', 'CINES_30', 'CINES_31', 'CINES_32', 'CINES_33', 'CINES_34']:
-                        distances = eval(row[f'distance_{cine}'])
-                        # Distances is a list of three values [distance_x, distance_y, distance_z]
-                        distance_x, distance_y, distance_z = distances
-
-                        # Append the distances to the respective lists in the dictionary
-                        residuals[cine]['rx'].append(distance_x)
-                        residuals[cine]['ry'].append(distance_y)
-                        residuals[cine]['rz'].append(distance_z) 
-
-                    # Calculate the sum of all rx, ry, and rz for all CINEs
-                    total_rx.append(sum(sum(residuals[cine]['rx']) for cine in residuals))
-                    total_ry.append(sum(sum(residuals[cine]['ry']) for cine in residuals))
-                    total_rz.append(sum(sum(residuals[cine]['rz']) for cine in residuals))
-
-                # Append the residuals for this combination of x, y, and z
-                all_residuals.append((x, y, z, total_rx, total_ry, total_rz))
-                                     
-    return(all_residuals)
-
-
-#each separate x, y, z commbination
-def cal_residual(param_vec, df, t=12):
-    x, y, z = param_vec
-
-    # Filter the DataFrame for the specified t value and x, y, z parameters
-    df_t = df[(df['t'] == t) & (df['i'] == x) & (df['j'] == y) & (df['k'] == z)]
-
-    # Initialize lists to store residuals
-    total_rx = []
-    total_ry = []
-    total_rz = []
-
-    for _, row in df_t.iterrows():
-        for cine in ['CINES_29', 'CINES_30', 'CINES_31', 'CINES_32', 'CINES_33', 'CINES_34']:
-            distances = eval(row[f'distance_{cine}'])
-            distance_x, distance_y, distance_z = distances
-            total_rx.append(distance_x)
-            total_ry.append(distance_y)
-            total_rz.append(distance_z)
-
-    # Combine all residuals into a single array
-    residuals = np.concatenate([total_rx, total_ry, total_rz])
-
-    return residuals
-
-
-
-
-# Reading febio?
-# model = FEBShellModel(files,pressure,'HGO',order)
-# param_dict = ParamDict(model.params)
-# #param_dict.save('params.csv') #after saving this file, it was modified and then we read it in the next line
-# param_dict.read('params.csv')
-
-
-#%% Least square optimization
-def write_feb(reference, NewFebName, params = None): 
-    for i in range(len(params)):
-        update_BC_parameters(reference, params[i][0], params[i][1], NewFebName)
-    updates_file_output = {'new_type': 'vtk'}
-    update_output(NewFebName, updates_file_output, NewFebName)
-    return
-
-
-
-def run_febio(file_path, file_name):
-    print("Running FEBio simulation", flush=True)
-
-    try:
-        # Command to set environment variable
-        os.system('export OMP_NUM_THREADS=2')
-        feb_file = os.path.join(file_path, file_name+ '.feb')
-        log_file = os.path.join(file_path, file_name+ '.log')
-        # Command to run FEBio
-        result = os.system(f'febio4 {feb_file} -o {log_file}')
-        print(f"Command executed with return code: {result}")
-    except Exception as e:
-        print(f"Could not run FEBio or some other error: {e}", flush=True)
-        return
-    log_file_path = log_file
-    print(f"Attempting to open log file at: {log_file_path}")
-
-    try:
-        with open(log_file_path, 'r') as logf:
-            lines = logf.readlines()
-            # Check if the last non-empty line contains the termination message
-            last_line = next((line for line in reversed(lines) if line.strip()), "")
-            if "N O R M A L   T E R M I N A T I O N" in last_line:
-                print("FEBio simulation completed", flush=True)
-                vtk_file = os.path.join(file_path, file_name+ '.0.vtk')
-                return vtk_file
-            else:
-                raise RuntimeError("Error: FEBio simulation did not end normally. Exiting.")
-    except Exception as e:
-        print(f"Error reading log file: {e}")
+#%% calc residual : step by step script
 
 
 ## TEST##
@@ -1935,4 +1829,109 @@ path_3d_pattern = "AO_SINUS_STACK_CINES_{cine}_vtk"
 file_3d_pattern = main_file_name + "_transverse_slice.{t}.vtk"
 excel_output = main_path + "center_distance_complete_test.xlsx"
 distance2excel(timesteps, cines, path_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, file_3d_pattern, excel_output)
+# %% Least square optimisation : functionnal version
+from scipy.optimize import least_squares
+# remember to adjust the file names to those you are using
+
+def calc_residual(new_params):
+    print(f"New params: {new_params}")
+    t_systole = 11
+    timesteps = 40
+    cines = [29, 30, 31, 32, 33, 34]
+    main_path = "C:/Users/jr403s/Documents/Least_square_test/"
+    main_file_name = "Whole_heart_2016_42_mesh_V3_test_rewrite"
+    reference_file = os.path.join(main_path, "Whole_heart_2016_42_mesh_V3_reference_v1.feb")
+
+    new_simu = os.path.join(main_path, main_file_name)
+    new_feb_file = os.path.join(main_path, f"{main_file_name}.feb")
+
+    # Write the FEB file
+    write_feb(reference_file, new_feb_file, new_params)
+
+    # Run the FEBio simulation
+    run_febio(main_path, main_file_name)
+
+    # Warp VTK files
+    for t in range(timesteps):
+        input_warp = f"{new_simu}.{t}.vtk"
+        output_warp = f"{new_simu}_warped.{t}.vtk"
+        warp_vtk(input_warp, output_warp)
+
+    # Process each cine
+    for cine in cines:
+        input_seg = f"C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D/AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+        output_path = os.path.join(main_path, f"AO_SINUS_STACK_CINES_{cine}_vtk")
+
+        model3D_pattern = f"{main_file_name}_warped.{{t}}.vtk"
+        seg_pattern = "rotated_{t}.vtk"
+        output_pattern = f"{main_file_name}_transverse_slice.{{t}}.vtk"
+
+        vtk2Dslicer(main_path, input_seg, output_path, model3D_pattern, seg_pattern, output_pattern, timesteps)
+
+    # Calculate distances and output to Excel
+    path_2dMRI = "C:/Users/jr403s/Documents/Test_segmentation_itk/Segmentation_2D"
+    path_2d_pattern = "AO_SINUS_STACK_CINES_{cine}/AO_SINUS_STACK_CINES_{cine}_vtk"
+    file_2d_pattern = "rotated_{t}.vtk"
+    basepath_3dmodel = main_path
+    path_3d_pattern = "AO_SINUS_STACK_CINES_{cine}_vtk"
+    file_3d_pattern = f"{main_file_name}_transverse_slice.{{t}}.vtk"
+    excel_output = os.path.join(main_path, "center_distance_complete_test.xlsx")
+
+    df = distance2excel(timesteps, cines, path_2dMRI, path_2d_pattern, file_2d_pattern, basepath_3dmodel, path_3d_pattern, file_3d_pattern, excel_output)
+
+    row = df[df['t'] == t_systole]
+
+    # distances_xyz = []
+    dist_x = []
+    dist_y = []
+    dist_z = []
+    for cine in cines:
+        column_name = f"distance_xyz_CINES_{cine}"
+        if column_name in df.columns:
+            # distances_xyz.append(row[column_name].values[0])
+            dist_x.append(row[column_name].values[0][0])
+            dist_y.append(row[column_name].values[0][1])
+            dist_z.append(row[column_name].values[0][2])
+
+    return dist_x, dist_y, dist_z
+
+# Example usage
+# new_params = [["PrescribedDisplacement2", {'initial_value': x, 'relative': 0}],
+#               ["PrescribedDisplacement3", {'initial_value': y, 'relative': 0}],
+#               ["PrescribedDisplacement4", {'initial_value': z, 'relative': 0}]]
+
+
+# calc_residual(new_params)
+
+def residuals(params):
+    x, y, z = params
+    new_params = [
+        ["PrescribedDisplacement2", {'initial_value': x, 'relative': 0}],
+        ["PrescribedDisplacement3", {'initial_value': y, 'relative': 0}],
+        ["PrescribedDisplacement4", {'initial_value': z, 'relative': 0}]
+    ]
+    dist_x, dist_y, dist_z = calc_residual(new_params)
+    # Combine the residuals from dist_x, dist_y, and dist_z
+    residuals = np.concatenate([dist_x, dist_y, dist_z])
+    return residuals
+
+# print(residuals([-3, -1, -8]))
+# print(residuals([0, 0, 0]))
+# print(residuals([5, 5, -20]))
+
+
+# Initial guess for x, y, z
+initial_guess = [-3, -1., -1]
+
+# Define bounds for each parameter
+bound_range = ([-5, -3, -3], [-1, 1, 1])
+
+# Perform the least squares optimization
+result = least_squares(residuals, initial_guess, bounds = bound_range)
+
+# Extract the optimized parameters
+x_opt, y_opt, z_opt = result.x
+
+print(f"Optimized parameters: x = {x_opt}, y = {y_opt}, z = {z_opt}")
+
 # %%
